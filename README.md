@@ -38,18 +38,18 @@ services:
     isKitten ? 'cats' : 'dogs',
   ]
 %}
-<div{{ my_attribute.addClass(my_classes).setAttribute('id', 'myUniqueId')|raw }}>
+<div{{ my_attribute.addClass(my_classes).setAttribute('id', 'myUniqueId') }}>
   {{ content }}
 </div>
 ```
 
 ```twig
-<div{{ create_attribute({'class': ['region', 'region--header']})|raw }}>
+<div{{ create_attribute({'class': ['region', 'region--header']}) }}>
   {{ content }}
 </div>
 ```
 
-Examples were copied from [official Drupal documentation](https://www.drupal.org/docs/8/theming-drupal-8/using-attributes-in-templates). Maybe you noticed one difference. You must use `raw` filter to disable default twig variable auto-escape. It's not necessary with Drupal because he's adding wrapper function to printed variables to overcome native twig auto-escaping.
+Examples were copied from [official Drupal documentation](https://www.drupal.org/docs/8/theming-drupal-8/using-attributes-in-templates).
 
 ## Use Cases
 - [Drupal - Pattern Lab](https://patternlab.io/)  

@@ -5,23 +5,26 @@ namespace Parisek\Twig;
 use Drupal\Component\Attribute\AttributeCollection;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
+use Twig\Environment;
 
-final class AttributeExtension extends AbstractExtension {
+class AttributeExtension extends AbstractExtension
+{
+    public function getFunctions(): array
+    {
+        return [
+            new TwigFunction(
+                "create_attribute",
+                [$this, "createAttribute"],
+                [
+                    "needs_environment" => true,
+                    "is_safe" => ["html"],
+                ]
+            ),
+        ];
+    }
 
-  public function getFunctions() {
-    return [
-      new TwigFunction('create_attribute', [
-        $this,
-        'createAttribute',
-      ], [
-        'is_safe' => [
-          'html'
-        ]
-      ]),
-    ];
-  }
-
-  public function createAttribute(array $attributes = []) {
-    return new AttributeCollection($attributes);
-  }
+    public function createAttribute(Environment $environment, array $attributes = []): object
+    {
+        return new AttributeCollection($attributes);
+    }
 }
