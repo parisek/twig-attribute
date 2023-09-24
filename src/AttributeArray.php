@@ -1,34 +1,34 @@
 <?php
 
-namespace Drupal\Core\Template;
+namespace Drupal\Component\Attribute;
 
 use Drupal\Component\Utility\Html;
 
 /**
  * A class that defines a type of Attribute that can be added to as an array.
  *
- * To use with Attribute, the array must be specified.
+ * To use with AttributeCollection, the array must be specified.
  * Correct:
  * @code
- *  $attributes = new Attribute();
- *  $attributes['class'] = array();
+ *  $attributes = new AttributeCollection();
+ *  $attributes['class'] = [];
  *  $attributes['class'][] = 'cat';
  * @endcode
  * Incorrect:
  * @code
- *  $attributes = new Attribute();
+ *  $attributes = new AttributeCollection();
  *  $attributes['class'][] = 'cat';
  * @endcode
  *
- * @see \Drupal\Core\Template\Attribute
+ * @see \Drupal\Component\Attribute\AttributeCollection
  */
 class AttributeArray extends AttributeValueBase implements \ArrayAccess, \IteratorAggregate {
 
   /**
    * Ensures empty array as a result of array_filter will not print '$name=""'.
    *
-   * @see \Drupal\Core\Template\AttributeArray::__toString()
-   * @see \Drupal\Core\Template\AttributeValueBase::render()
+   * @see \Drupal\Component\Attribute\AttributeArray::__toString()
+   * @see \Drupal\Component\Attribute\AttributeValueBase::render()
    */
   const RENDER_EMPTY_ATTRIBUTE = FALSE;
 
