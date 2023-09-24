@@ -1,6 +1,6 @@
 <?php
 
-namespace Drupal\Core\Template;
+namespace Drupal\Component\Attribute;
 
 use Drupal\Component\Utility\Html;
 
@@ -11,9 +11,9 @@ use Drupal\Component\Utility\Html;
  * They are attributes that if they exist in the tag, they are TRUE.
  * Examples include selected, disabled, checked, readonly.
  *
- * To set a boolean attribute on the Attribute class, set it to TRUE.
+ * To set a boolean attribute on the AttributeCollection class, set it to TRUE.
  * @code
- *  $attributes = new Attribute();
+ *  $attributes = new AttributeCollection();
  *  $attributes['disabled'] = TRUE;
  *  echo '<select' . $attributes . '/>';
  *  // produces <select disabled>;
@@ -22,7 +22,7 @@ use Drupal\Component\Utility\Html;
  *  // produces <select>;
  * @endcode
  *
- * @see \Drupal\Core\Template\Attribute
+ * @see \Drupal\Component\Attribute\AttributeCollection
  */
 class AttributeBoolean extends AttributeValueBase {
 

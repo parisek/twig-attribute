@@ -1,6 +1,6 @@
 <?php
 
-namespace Drupal\Core\Template;
+namespace Drupal\Component\Attribute;
 
 use Drupal\Component\Render\PlainTextOutput;
 use Drupal\Component\Render\MarkupInterface;
@@ -12,8 +12,8 @@ use Drupal\Component\Utility\NestedArray;
  * To use, optionally pass in an associative array of defined attributes, or
  * add attributes using array syntax. For example:
  * @code
- *  $attributes = new Attribute(array('id' => 'socks'));
- *  $attributes['class'] = array('black-cat', 'white-cat');
+ *  $attributes = new AttributeCollection(['id' => 'socks']);
+ *  $attributes['class'] = ['black-cat', 'white-cat'];
  *  $attributes['class'][] = 'black-white-cat';
  *  echo '<cat' . $attributes . '>';
  *  // Produces <cat id="socks" class="black-cat white-cat black-white-cat">
@@ -21,8 +21,8 @@ use Drupal\Component\Utility\NestedArray;
  *
  * $attributes always prints out all the attributes. For example:
  * @code
- *  $attributes = new Attribute(array('id' => 'socks'));
- *  $attributes['class'] = array('black-cat', 'white-cat');
+ *  $attributes = new AttributeCollection(['id' => 'socks']);
+ *  $attributes['class'] = ['black-cat', 'white-cat'];
  *  $attributes['class'][] = 'black-white-cat';
  *  echo '<cat class="cat ' . $attributes['class'] . '"' . $attributes . '>';
  *  // Produces <cat class="cat black-cat white-cat black-white-cat" id="socks" class="cat black-cat white-cat black-white-cat">
@@ -47,7 +47,7 @@ use Drupal\Component\Utility\NestedArray;
  * @code
  *  $path = 'javascript:alert("xss");';
  *  $path = UrlHelper::stripDangerousProtocols($path);
- *  $attributes = new Attribute(array('href' => $path));
+ *  $attributes = new AttributeCollection(['href' => $path]);
  *  echo '<a' . $attributes . '>';
  *  // Produces <a href="alert(&quot;xss&quot;);">
  * @endcode
@@ -57,7 +57,7 @@ use Drupal\Component\Utility\NestedArray;
  * PlainTextOutput::renderFromHtml() before being escaped. For example:
  * @code
  *   $value = t('Highlight the @tag tag', ['@tag' => '<em>']);
- *   $attributes = new Attribute(['value' => $value]);
+ *   $attributes = new AttributeCollection(['value' => $value]);
  *   echo '<input' . $attributes . '>';
  *   // Produces <input value="Highlight the &lt;em&gt; tag">
  * @endcode
@@ -71,12 +71,12 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
   /**
    * Stores the attribute data.
    *
-   * @var \Drupal\Core\Template\AttributeValueBase[]
+   * @var \Drupal\Component\Attribute\AttributeValueBase[]
    */
   protected $storage = [];
 
   /**
-   * Constructs a \Drupal\Core\Template\Attribute object.
+   * Constructs a \Drupal\Component\Attribute\AttributeCollection object.
    *
    * @param array $attributes
    *   An associative array of key-value pairs to be converted to attributes.
@@ -113,7 +113,7 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    * @param mixed $value
    *   The attribute value.
    *
-   * @return \Drupal\Core\Template\AttributeValueBase
+   * @return \Drupal\Component\Attribute\AttributeValueBase
    *   An AttributeValueBase representation of the attribute's value.
    */
   protected function createAttributeValue($name, $value) {
@@ -289,7 +289,7 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    *
    * This method is implemented to take precedence over hasClass() for Twig 2.0.
    *
-   * @return \Drupal\Core\Template\AttributeValueBase
+   * @return \Drupal\Component\Attribute\AttributeValueBase
    *   The class attribute value if set.
    *
    * @see twig_get_attribute()
@@ -321,8 +321,8 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    */
   public function __toString() {
     $return = '';
-    /** @var \Drupal\Core\Template\AttributeValueBase $value */
     foreach ($this->storage as $value) {
+    /** @var \Drupal\Component\Attribute\AttributeValueBase $value */
       $rendered = $value->render();
       if ($rendered) {
         $return .= ' ' . $rendered;
@@ -384,12 +384,12 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
   /**
    * Merges an Attribute object into the current storage.
    *
-   * @param \Drupal\Core\Template\Attribute $collection
+   * @param \Drupal\Component\Attribute\AttributeCollection $collection
    *   The Attribute object to merge.
    *
    * @return $this
    */
-  public function merge(Attribute $collection) {
+  public function merge(AttributeCollection $collection) {
     $merged_attributes = NestedArray::mergeDeep($this->toArray(), $collection->toArray());
     foreach ($merged_attributes as $name => $value) {
       $this->storage[$name] = $this->createAttributeValue($name, $value);

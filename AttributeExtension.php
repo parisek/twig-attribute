@@ -2,7 +2,7 @@
 
 namespace Parisek\Twig;
 
-use Drupal\Core\Template\AttributeCollection;
+use Drupal\Component\Attribute\AttributeCollection;
 use Twig\Extension\AbstractExtension;
 use Twig\TwigFunction;
 use Twig\Environment;
