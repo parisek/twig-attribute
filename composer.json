@@ -12,7 +12,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Drupal\\Core\\Template\\": "src",
+            "Drupal\\Component\\Attribute\\": "src",
             "Parisek\\Twig\\": ""
         }
     }
