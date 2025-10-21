@@ -71,8 +71,11 @@ class AttributeArray extends AttributeValueBase implements \ArrayAccess, \Iterat
 
   /**
    * Implements the magic __toString() method.
+   *
+   * @return string
+   *   The space-separated, escaped string representation of array values.
    */
-  public function __toString() {
+  public function __toString(): string {
     // Filter out any empty values before printing.
     $this->value = array_unique(array_filter($this->value));
     return Html::escape(implode(' ', $this->value));
@@ -97,7 +100,7 @@ class AttributeArray extends AttributeValueBase implements \ArrayAccess, \Iterat
    * @return array
    *   The old array value.
    */
-  public function exchangeArray($input) {
+  public function exchangeArray(array $input): array {
     $old = $this->value;
     $this->value = $input;
     return $old;

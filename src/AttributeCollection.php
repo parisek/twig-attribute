@@ -81,7 +81,7 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    * @param array $attributes
    *   An associative array of key-value pairs to be converted to attributes.
    */
-  public function __construct($attributes = []) {
+  public function __construct(array $attributes = []) {
     foreach ($attributes as $name => $value) {
       $this->offsetSet($name, $value);
     }
@@ -116,7 +116,7 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    * @return \Drupal\Component\Attribute\AttributeValueBase
    *   An AttributeValueBase representation of the attribute's value.
    */
-  protected function createAttributeValue($name, $value) {
+  protected function createAttributeValue(string $name, $value): AttributeValueBase {
     // If the value is already an AttributeValueBase object,
     // return a new instance of the same class, but with the new name.
     if ($value instanceof AttributeValueBase) {
@@ -170,13 +170,12 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
   /**
    * Adds classes or merges them on to array of existing CSS classes.
    *
-   * @param string|array ...
+   * @param string|array ...$args
    *   CSS classes to add to the class attribute array.
    *
    * @return $this
    */
-  public function addClass() {
-    $args = func_get_args();
+  public function addClass(...$args): self {
     if ($args) {
       $classes = [];
       foreach ($args as $arg) {
@@ -206,12 +205,12 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    *
    * @param string $attribute
    *   Name of the attribute.
-   * @param string|array $value
+   * @param mixed $value
    *   Value(s) to set for the given attribute key.
    *
    * @return $this
    */
-  public function setAttribute($attribute, $value) {
+  public function setAttribute(string $attribute, $value): self {
     $this->offsetSet($attribute, $value);
 
     return $this;
@@ -226,20 +225,19 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    * @return bool
    *   Returns TRUE if the attribute exists, or FALSE otherwise.
    */
-  public function hasAttribute($name) {
+  public function hasAttribute(string $name): bool {
     return array_key_exists($name, $this->storage);
   }
 
   /**
    * Removes an attribute from an Attribute object.
    *
-   * @param string|array ...
+   * @param string|array ...$args
    *   Attributes to remove from the attribute array.
    *
    * @return $this
    */
-  public function removeAttribute() {
-    $args = func_get_args();
+  public function removeAttribute(...$args): self {
     foreach ($args as $arg) {
       // Support arrays or multiple arguments.
       if (is_array($arg)) {
@@ -258,15 +256,14 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
   /**
    * Removes argument values from array of existing CSS classes.
    *
-   * @param string|array ...
+   * @param string|array ...$args
    *   CSS classes to remove from the class attribute array.
    *
    * @return $this
    */
-  public function removeClass() {
+  public function removeClass(...$args): self {
     // With no class attribute, there is no need to remove.
     if (isset($this->storage['class']) && $this->storage['class'] instanceof AttributeArray) {
-      $args = func_get_args();
       $classes = [];
       foreach ($args as $arg) {
         // Merge the values passed in from the classes array.
@@ -307,7 +304,7 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    * @return bool
    *   Returns TRUE if the class exists, or FALSE otherwise.
    */
-  public function hasClass($class) {
+  public function hasClass(string $class): bool {
     if (isset($this->storage['class']) && $this->storage['class'] instanceof AttributeArray) {
       return in_array($class, $this->storage['class']->value());
     }
@@ -318,8 +315,11 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
 
   /**
    * Implements the magic __toString() method.
+   *
+   * @return string
+   *   The string representation of all attributes.
    */
-  public function __toString() {
+  public function __toString(): string {
     $return = '';
     foreach ($this->storage as $value) {
     /** @var \Drupal\Component\Attribute\AttributeValueBase $value */
@@ -337,7 +337,7 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    * @return array
    *   An associative array of attributes.
    */
-  public function toArray() {
+  public function toArray(): array {
     $return = [];
     foreach ($this->storage as $name => $value) {
       $return[$name] = $value->value();
@@ -365,8 +365,11 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
 
   /**
    * Returns the whole array.
+   *
+   * @return \Drupal\Component\Attribute\AttributeValueBase[]
+   *   The attribute storage array.
    */
-  public function storage() {
+  public function storage(): array {
     return $this->storage;
   }
 
@@ -389,7 +392,7 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
    *
    * @return $this
    */
-  public function merge(AttributeCollection $collection) {
+  public function merge(AttributeCollection $collection): self {
     $merged_attributes = NestedArray::mergeDeep($this->toArray(), $collection->toArray());
     foreach ($merged_attributes as $name => $value) {
       $this->storage[$name] = $this->createAttributeValue($name, $value);
