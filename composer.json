@@ -9,10 +9,18 @@
         "drupal/core-utility": "^10.0 || ^11.0",
         "twig/twig": "^2.4 || ^3.0"
     },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0 || ^11.0"
+    },
     "autoload": {
         "psr-4": {
             "Drupal\\Component\\Attribute\\": "src",
             "Parisek\\Twig\\": ""
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Parisek\\Twig\\Tests\\": "tests"
         }
     }
 }
