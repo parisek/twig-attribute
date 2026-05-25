@@ -38,7 +38,7 @@ use Parisek\Twig\Internal\PlainTextOutput;
  * @endcode
  * Produces:
  * @code
- * <cat class="cat black-cat white-cat black-white-cat my-custom-class" id="socks">
+ * <cat class="black-cat white-cat black-white-cat my-custom-class" id="socks">
  * @endcode
  *
  * The attribute keys and values are automatically escaped for output with
