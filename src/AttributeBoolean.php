@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Drupal\Component\Attribute;
 
-use Drupal\Component\Utility\Html;
+use Parisek\Twig\Internal\Escape;
 
 /**
  * A class that defines a type of boolean HTML attribute.
@@ -11,9 +13,9 @@ use Drupal\Component\Utility\Html;
  * They are attributes that if they exist in the tag, they are TRUE.
  * Examples include selected, disabled, checked, readonly.
  *
- * To set a boolean attribute on the AttributeCollection class, set it to TRUE.
+ * To set a boolean attribute on the Attribute class, set it to TRUE.
  * @code
- *  $attributes = new AttributeCollection();
+ *  $attributes = new Attribute();
  *  $attributes['disabled'] = TRUE;
  *  echo '<select' . $attributes . '/>';
  *  // produces <select disabled>;
@@ -37,7 +39,7 @@ class AttributeBoolean extends AttributeValueBase {
    * Implements the magic __toString() method.
    */
   public function __toString() {
-    return $this->value === FALSE ? '' : Html::escape($this->name);
+    return $this->value === FALSE ? '' : Escape::html($this->name);
   }
 
 }

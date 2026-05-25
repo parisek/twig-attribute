@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Drupal\Component\Attribute;
 
-use Drupal\Component\Utility\Html;
+use Parisek\Twig\Internal\Escape;
 
 /**
  * Defines the base class for an attribute type.
@@ -46,14 +48,15 @@ abstract class AttributeValueBase {
    * While __toString only returns the value in a string form, render()
    * contains the name of the attribute as well.
    *
-   * @return string
+   * @return string|null
    *   The string representation of the attribute.
    */
   public function render() {
     $value = (string) $this;
     if (isset($this->value) && static::RENDER_EMPTY_ATTRIBUTE || !empty($value)) {
-      return Html::escape($this->name) . '="' . $value . '"';
+      return Escape::html($this->name) . '="' . $value . '"';
     }
+    return NULL;
   }
 
   /**
