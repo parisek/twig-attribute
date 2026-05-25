@@ -15,6 +15,7 @@
     "autoload": {
         "psr-4": {
             "Drupal\\Component\\Attribute\\": "src",
+            "Parisek\\Twig\\Internal\\": "src/Internal",
             "Parisek\\Twig\\": ""
         }
     },
