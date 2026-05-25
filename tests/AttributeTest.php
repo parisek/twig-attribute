@@ -9,24 +9,25 @@ use Drupal\Component\Attribute\AttributeBoolean;
 use Drupal\Component\Attribute\AttributeCollection as Attribute;
 use Drupal\Component\Attribute\AttributeString;
 use Drupal\Component\Attribute\AttributeValueBase;
+
 use Parisek\Twig\Internal\Escape;
+
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+
 use Twig\Environment;
 use Twig\Loader\ArrayLoader;
 use Twig\Markup as TwigMarkup;
 
 /**
  * Test-local marker interface mirroring Drupal\Component\Render\MarkupInterface
- * without depending on drupal/core-render. The production package's own
- * MarkupInterface (created in Task 7) lives under Drupal\Component\Attribute
- * and serves consumers; this private fixture keeps tests decoupled from it.
+ * without depending on drupal/core-render. Private fixture: keeps test setup
+ * decoupled from the package's own production marker under Drupal\Component\Attribute.
  */
 interface MarkupInterface extends \JsonSerializable, \Stringable
 {
-    public function __toString(): string;
 }
 
 /**
