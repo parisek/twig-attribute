@@ -5,9 +5,8 @@
     "homepage": "https://github.com/parisek/twig-attribute",
     "license": "GPL-2.0-or-later",
     "require": {
-        "drupal/core-render": "^10.0 || ^11.0",
-        "drupal/core-utility": "^10.0 || ^11.0",
-        "twig/twig": "^2.4 || ^3.0"
+        "php": "^8.3",
+        "twig/twig": "^3.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^10.0 || ^11.0"

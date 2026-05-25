@@ -4,161 +4,8 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5a800dc8bdb8158eb68bf85374a76125",
+    "content-hash": "ed23bcde618b65f69e756bbc3e5e1b09",
     "packages": [
-        {
-            "name": "drupal/core-render",
-            "version": "11.3.10",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/drupal/core-render.git",
-                "reference": "1efef1d727644b0399ffcef2302458c2945c02a8"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/drupal/core-render/zipball/1efef1d727644b0399ffcef2302458c2945c02a8",
-                "reference": "1efef1d727644b0399ffcef2302458c2945c02a8",
-                "shasum": ""
-            },
-            "require": {
-                "drupal/core-utility": "^11.3",
-                "php": ">=8.3.0"
-            },
-            "type": "library",
-            "extra": {
-                "_readme": [
-                    "This file was partially generated automatically. See: https://www.drupal.org/node/3293830"
-                ]
-            },
-            "autoload": {
-                "psr-4": {
-                    "Drupal\\Component\\Render\\": ""
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "GPL-2.0-or-later"
-            ],
-            "description": "Renders placeholder variables for HTML and plain-text display.",
-            "homepage": "https://www.drupal.org/project/drupal",
-            "keywords": [
-                "drupal"
-            ],
-            "support": {
-                "source": "https://github.com/drupal/core-render/tree/11.3.10"
-            },
-            "time": "2026-05-06T14:19:19+00:00"
-        },
-        {
-            "name": "drupal/core-utility",
-            "version": "11.3.10",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/drupal/core-utility.git",
-                "reference": "3c4c5b99d997ba8bfca9e815534e5f2fbfc2685e"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/drupal/core-utility/zipball/3c4c5b99d997ba8bfca9e815534e5f2fbfc2685e",
-                "reference": "3c4c5b99d997ba8bfca9e815534e5f2fbfc2685e",
-                "shasum": ""
-            },
-            "require": {
-                "masterminds/html5": "^2.7",
-                "php": ">=8.3.0"
-            },
-            "type": "library",
-            "extra": {
-                "_readme": [
-                    "This file was partially generated automatically. See: https://www.drupal.org/node/3293830"
-                ]
-            },
-            "autoload": {
-                "psr-4": {
-                    "Drupal\\Component\\Utility\\": ""
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "GPL-2.0-or-later"
-            ],
-            "description": "Mostly static utility classes for string, xss, array, image, and other commonly needed manipulations.",
-            "homepage": "https://www.drupal.org/project/drupal",
-            "keywords": [
-                "drupal"
-            ],
-            "support": {
-                "source": "https://github.com/drupal/core-utility/tree/11.3.10"
-            },
-            "time": "2026-04-08T16:50:57+00:00"
-        },
-        {
-            "name": "masterminds/html5",
-            "version": "2.10.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/Masterminds/html5-php.git",
-                "reference": "fcf91eb64359852f00d921887b219479b4f21251"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/Masterminds/html5-php/zipball/fcf91eb64359852f00d921887b219479b4f21251",
-                "reference": "fcf91eb64359852f00d921887b219479b4f21251",
-                "shasum": ""
-            },
-            "require": {
-                "ext-dom": "*",
-                "php": ">=5.3.0"
-            },
-            "require-dev": {
-                "phpunit/phpunit": "^4.8.35 || ^5.7.21 || ^6 || ^7 || ^8 || ^9"
-            },
-            "type": "library",
-            "extra": {
-                "branch-alias": {
-                    "dev-master": "2.7-dev"
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "Masterminds\\": "src"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Matt Butcher",
-                    "email": "technosophos@gmail.com"
-                },
-                {
-                    "name": "Matt Farina",
-                    "email": "matt@mattfarina.com"
-                },
-                {
-                    "name": "Asmir Mustafic",
-                    "email": "goetas@gmail.com"
-                }
-            ],
-            "description": "An HTML5 parser and serializer.",
-            "homepage": "http://masterminds.github.io/html5-php",
-            "keywords": [
-                "HTML5",
-                "dom",
-                "html",
-                "parser",
-                "querypath",
-                "serializer",
-                "xml"
-            ],
-            "support": {
-                "issues": "https://github.com/Masterminds/html5-php/issues",
-                "source": "https://github.com/Masterminds/html5-php/tree/2.10.0"
-            },
-            "time": "2025-07-25T09:04:22+00:00"
-        },
         {
             "name": "symfony/deprecation-contracts",
             "version": "v3.7.0",
@@ -2269,7 +2116,9 @@
     "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": {},
+    "platform": {
+        "php": "^8.3"
+    },
     "platform-dev": {},
     "plugin-api-version": "2.9.0"
 }
