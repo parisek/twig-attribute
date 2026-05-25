@@ -1,3 +1,4 @@
 .vscode
 vendor/
 .phpunit.cache/
+.upstream/
