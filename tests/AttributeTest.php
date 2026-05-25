@@ -8,7 +8,6 @@ use Drupal\Component\Attribute\AttributeArray;
 use Drupal\Component\Attribute\AttributeBoolean;
 use Drupal\Component\Attribute\AttributeCollection as Attribute;
 use Drupal\Component\Attribute\AttributeString;
-use Drupal\Component\Attribute\AttributeValueBase;
 
 use Parisek\Twig\Internal\Escape;
 
@@ -264,15 +263,18 @@ class AttributeTest extends TestCase {
 
     // Remove multiple classes.
     $attribute->removeClass('xx', 'yy');
-    $this->assertNotContains(['xx', 'yy'], $attribute['class']->value());
+    $this->assertNotContains('xx', $attribute['class']->value());
+    $this->assertNotContains('yy', $attribute['class']->value());
 
     // Remove an array of classes.
     $attribute->removeClass(['red', 'green', 'blue']);
-    $this->assertNotContains(['red', 'green', 'blue'], $attribute['class']->value());
+    $this->assertNotContains('red', $attribute['class']->value());
+    $this->assertNotContains('green', $attribute['class']->value());
+    $this->assertNotContains('blue', $attribute['class']->value());
 
     // Remove a class that does not exist.
     $attribute->removeClass('gg');
-    $this->assertNotContains(['gg'], $attribute['class']->value());
+    $this->assertNotContains('gg', $attribute['class']->value());
     // Test that the array index remains sequential.
     $this->assertEquals(['aa'], $attribute['class']->value());
 

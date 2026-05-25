@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Drupal\Component\Attribute;
 
-use Parisek\Twig\Internal\Escape;
 use Parisek\Twig\Internal\NestedArray;
 use Parisek\Twig\Internal\PlainTextOutput;
 

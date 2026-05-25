@@ -56,7 +56,7 @@ services:
 The full API (class methods, escape semantics, `without` filter behavior) mirrors
 [Drupal's Attribute class](https://api.drupal.org/api/drupal/core%21lib%21Drupal%21Core%21Template%21Attribute.php/class/Attribute/11.x).
 
-## Upgrading from 1.0.x to 1.1.0
+## Upgrading from 1.5.x to 1.6.0
 
 **Action required: none for the vast majority of consumers.** Run
 `composer update parisek/twig-attribute`.
@@ -72,14 +72,14 @@ What changes under the hood:
   - `hasAttribute(string $name): bool` — check existence without throwing.
   - `removeClass(...$classes): static` — symmetric counterpart of `addClass`.
   - `getClass(): AttributeArray` — read the class collection.
-  - `jsonSerialize(): array` — JSON encoding support.
+  - `jsonSerialize(): string` — JSON encoding support (returns the rendered attribute string).
   - `__clone()` — deep-clone correctness.
 - The package now ships its own test suite (`tests/AttributeTest.php`,
   18 methods, pure PHPUnit). Run `vendor/bin/phpunit` to verify the
   install if you want extra confidence.
 - Composer constraints tightened to **Twig 3+ and PHP ^8.3**. Both
   were already required transitively by `drupal/core-utility ^10.0 || ^11.0`
-  in 1.0.x, so this change doesn't shrink the real install matrix.
+  in 1.5.x, so this change doesn't shrink the real install matrix.
 - Both `drupal/core-render` and `drupal/core-utility` are **no longer
   required** by this package. `Html::escape()` is inlined as a 5-LOC
   private helper. `NestedArray::mergeDeep` and `PlainTextOutput::renderFromHtml`
@@ -94,17 +94,17 @@ What changes under the hood:
   package to your own `composer.json` `require`. This is the correct
   long-term shape regardless — relying on transitive availability is
   fragile.
-- **You're on PHP < 8.3 or Twig 2.** You couldn't actually install 1.0.x
+- **You're on PHP < 8.3 or Twig 2.** You couldn't actually install 1.5.x
   cleanly against modern Drupal 10/11 either, so this is more about
   cleaning up your constraints. Bump PHP/Twig in your own project, or
-  pin `parisek/twig-attribute` to `1.0.*` to stay on the previous floor.
+  pin `parisek/twig-attribute` to `1.5.*` to stay on the previous floor.
 
 ### Direct PHP usage
 
 If your code does `new \Drupal\Component\Attribute\AttributeCollection(...)`
 in PHP (instead of using `create_attribute()` from Twig), the refresh
 adds methods but doesn't remove any. Your existing calls keep working
-in 1.1.0.
+in 1.6.0.
 
 ## Development
 
@@ -126,4 +126,4 @@ for the rationale behind the inline shims that let this package drop
 - [Drupal — Pattern Lab](https://patternlab.io/)
 - [WordPress — Timber](https://wordpress.org/plugins/timber-library/)
 - [Pimcore — Templates](https://pimcore.com/en)
-- [parisek/styleguide](https://github.com/parisek/styleguide) — the package that drove the 1.1.0 refresh.
+- [parisek/styleguide](https://github.com/parisek/styleguide) — the package that drove the 1.6.0 refresh.

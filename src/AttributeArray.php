@@ -9,16 +9,16 @@ use Parisek\Twig\Internal\Escape;
 /**
  * A class that defines a type of Attribute that can be added to as an array.
  *
- * To use with Attribute, the array must be specified.
- * Correct:
+ * To use with AttributeCollection, the array can be specified explicitly,
+ * or the `class` key may be appended to without prior initialization —
+ * `AttributeCollection::offsetGet('class')` lazily initializes an empty
+ * AttributeArray for the special-case `class` key.
  * @code
- *  $attributes = new Attribute();
+ *  $attributes = new AttributeCollection();
  *  $attributes['class'] = [];
  *  $attributes['class'][] = 'cat';
- * @endcode
- * Incorrect:
- * @code
- *  $attributes = new Attribute();
+ *  // or, equivalently, relying on the lazy init:
+ *  $attributes = new AttributeCollection();
  *  $attributes['class'][] = 'cat';
  * @endcode
  *
