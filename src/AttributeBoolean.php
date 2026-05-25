@@ -13,9 +13,9 @@ use Parisek\Twig\Internal\Escape;
  * They are attributes that if they exist in the tag, they are TRUE.
  * Examples include selected, disabled, checked, readonly.
  *
- * To set a boolean attribute on the Attribute class, set it to TRUE.
+ * To set a boolean attribute on the AttributeCollection class, set it to TRUE.
  * @code
- *  $attributes = new Attribute();
+ *  $attributes = new AttributeCollection();
  *  $attributes['disabled'] = TRUE;
  *  echo '<select' . $attributes . '/>';
  *  // produces <select disabled>;

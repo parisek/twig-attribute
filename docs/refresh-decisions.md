@@ -1,4 +1,4 @@
-# Refresh decisions — 1.1.0
+# Refresh decisions — 1.6.0
 
 Captured from upstream Drupal 11.x sources fetched on 2026-05-25 (HEAD of `11.x`).
 
@@ -7,7 +7,7 @@ Captured from upstream Drupal 11.x sources fetched on 2026-05-25 (HEAD of `11.x`
 | Symbol | Used in | Call sites | Strategy |
 |---|---|---|---|
 | `Drupal\Component\Utility\Html::escape()` | `AttributeValueBase::render()`, `AttributeString::__toString()`, `AttributeArray::__toString()`, `AttributeBoolean::__toString()` | 4 | Already handled: replace with `Parisek\Twig\Internal\Escape::html()` (Task 2). |
-| `Drupal\Component\Render\MarkupInterface` | `Attribute` (implements), `Attribute::createAttributeValue()` (type check guard in the fork — upstream switched to `\Stringable`) | Interface only; class declares `implements MarkupInterface` | Define `Parisek\Twig\MarkupInterface` as a minimal interface extending `\JsonSerializable, \Stringable` with `__toString(): string`. ~10 LOC. |
+| `Drupal\Component\Render\MarkupInterface` | `Attribute` (implements), `Attribute::createAttributeValue()` (type check guard in the fork — upstream switched to `\Stringable`) | Interface only; class declares `implements MarkupInterface` | Define `Drupal\Component\Attribute\MarkupInterface` as a minimal interface extending `\JsonSerializable, \Stringable` with `__toString(): string`. ~10 LOC. |
 | `Drupal\Component\Render\PlainTextOutput::renderFromHtml()` | `Attribute::createAttributeValue()` | 1 | Inline as `Parisek\Twig\Internal\PlainTextOutput::renderFromHtml()`. Body is `html_entity_decode(strip_tags((string) $string), ENT_QUOTES, 'UTF-8')` — zero further Drupal deps. ~10 LOC. |
 | `Drupal\Component\Utility\NestedArray::mergeDeep()` | `Attribute::merge()` | 1 | Inline as `Parisek\Twig\Internal\NestedArray` carrying only `mergeDeep()` + `mergeDeepArray()`. Pure PHP, no outside deps. ~30 LOC. |
 | `Drupal\Core\Serialization\Attribute\JsonSchema` | `Attribute::__toString()` (PHP attribute `#[JsonSchema(...)]`) | 1 (decorative) | Drop the `#[JsonSchema(...)]` annotation from the ported class. It carries no runtime effect; it exists only for Drupal's JSON Schema discovery tooling. No shim needed. |
@@ -49,7 +49,7 @@ return html_entity_decode(strip_tags((string) $string), ENT_QUOTES, 'UTF-8');
 
 Estimated LOC: ~10 (class shell + docblock + method). No further deps.
 
-### `Parisek\Twig\MarkupInterface`
+### `Drupal\Component\Attribute\MarkupInterface`
 
 File: `src/MarkupInterface.php` (public namespace, not `Internal\` — it forms part of the package's public API because consumers may pass objects implementing it)
 

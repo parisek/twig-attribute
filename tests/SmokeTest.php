@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Parisek\Twig\Tests;
 
-use Drupal\Component\Attribute\AttributeCollection;
 use Parisek\Twig\AttributeExtension;
 use PHPUnit\Framework\TestCase;
 use Twig\Environment;

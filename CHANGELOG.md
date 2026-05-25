@@ -6,7 +6,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [1.1.0] - YYYY-MM-DD
+## [1.6.0] - 2026-05-25
 
 ### Added
 - 543-LOC PHPUnit test suite ported from Drupal 11.x core `AttributeTest.php`
@@ -16,7 +16,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `hasAttribute(string $name): bool`
   - `removeClass(...$classes): static`
   - `getClass(): AttributeArray`
-  - `jsonSerialize(): array`
+  - `jsonSerialize(): string` (returns the rendered attribute string)
   - `__clone()` for deep-clone correctness.
 - `Parisek\Twig\Internal\Escape::html()` — byte-identical inline replacement for
   Drupal's `Html::escape()` (5 LOC, `htmlspecialchars` with
@@ -46,10 +46,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `twig/twig ^2.4` support dropped. Twig 3+ only.
 
 ### Semver rationale
-Shipped as **1.1.0** rather than 2.0.0 because the tightened constraints
+Shipped as **1.6.0** rather than 2.0.0 because the tightened constraints
 (`php: ^8.3`, `twig/twig: ^3.0`) match what was already implied transitively
-by `drupal/core-utility ^10.0 || ^11.0` in 1.0.x — anyone who could install
-1.0.x against modern Drupal already had PHP 8.3+ and Twig 3+. The pruned
+by `drupal/core-utility ^10.0 || ^11.0` in 1.5.x — anyone who could install
+1.5.x against modern Drupal already had PHP 8.3+ and Twig 3+. The pruned
 `drupal/core-*` deps weren't reached by any external consumer through this
 package; consumers use the `create_attribute()` Twig function, not the Drupal
 classes directly.
