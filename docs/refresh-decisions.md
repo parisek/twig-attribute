@@ -83,6 +83,22 @@ The `#[JsonSchema(...)]` PHP attribute on `__toString()` is Drupal-internal tool
 
 Well within the 120 LOC escalation threshold. No escalation needed.
 
+## Adopted divergences
+
+### PHPStan level 5 (not 6)
+
+Level 6 was attempted first and produced **17 errors**, all `missingType.iterableValue` / `missingType.parameter` / `missingType.return` on ported Drupal source files (`src/AttributeCollection.php`, `src/AttributeArray.php`, `src/AttributeValueBase.php`, `src/Internal/NestedArray.php`, `AttributeExtension.php`). These are missing generic-typed array annotations and untyped constructor parameters inherited verbatim from upstream Drupal 11.x.
+
+Fixing them in Task 10 would touch `src/` files (out of scope for the PHPStan task). The parent `parisek/styleguide` repo also runs PHPStan at level 6 via `phpstan/phpstan ^2.0`, but that codebase uses PHPStan extensions and is fully typed. Since dialing down was explicitly allowed by the task plan when the count exceeds ~5, **level 5** was chosen.
+
+Level 5 produced **0 errors** after two targeted fixes to `src/AttributeCollection.php` (the `@implements ArrayAccess` generic annotation and `offsetSet` parameter type), which were logic-correctness fixes unrelated to the type-annotation gap:
+
+- `@implements \ArrayAccess<string, mixed>` (was `AttributeValueBase`) — `offsetSet` intentionally accepts raw input that is then converted by `createAttributeValue()`.
+- `offsetSet($name, mixed $value)` explicit type hint — mirrors the above.
+- `treatPhpDocTypesAsCertain: false` in `phpstan.neon` — silences a spurious `instanceof.alwaysTrue` where PHPDoc type narrowing causes PHPStan to see an `instanceof` check that is always true.
+
+Upgrading to level 6 later: annotate the ported `src/` files with `array<string, mixed>` / `array<int, string>` generics as appropriate, remove `treatPhpDocTypesAsCertain: false`, and bump `phpstan.neon` to `level: 6`.
+
 ## Other notes
 
 - The upstream `Attribute.php` has `#[\ReturnTypeWillChange]` attributes removed — return types are now explicit throughout. The port will adopt the explicit return types.

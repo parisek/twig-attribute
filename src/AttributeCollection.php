@@ -64,7 +64,7 @@ use Parisek\Twig\Internal\PlainTextOutput;
  *   // Produces <input value="Highlight the &lt;em&gt; tag">
  * @endcode
  *
- * @implements \ArrayAccess<string, \Drupal\Component\Attribute\AttributeValueBase>
+ * @implements \ArrayAccess<string, mixed>
  * @implements \IteratorAggregate<string, \Drupal\Component\Attribute\AttributeValueBase>
  *
  * @see \Parisek\Twig\Internal\Escape::html()
@@ -111,7 +111,7 @@ class AttributeCollection implements \ArrayAccess, \IteratorAggregate, MarkupInt
   /**
    * {@inheritdoc}
    */
-  public function offsetSet($name, $value): void {
+  public function offsetSet($name, mixed $value): void {
     $this->storage[$name] = $this->createAttributeValue($name, $value);
   }
 
