@@ -5,5 +5,5 @@ parameters:
         - AttributeExtension.php
     excludePaths:
         - vendor
-        - .upstream
+        - .upstream (?)
     treatPhpDocTypesAsCertain: false
