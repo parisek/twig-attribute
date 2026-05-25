@@ -9,9 +9,7 @@ use Drupal\Component\Attribute\AttributeBoolean;
 use Drupal\Component\Attribute\AttributeCollection as Attribute;
 use Drupal\Component\Attribute\AttributeString;
 use Drupal\Component\Attribute\AttributeValueBase;
-use Drupal\Component\Render\MarkupInterface;
-use Drupal\Component\Utility\Html;
-use Drupal\Component\Render\MarkupTrait;
+use Parisek\Twig\Internal\Escape;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -21,14 +19,51 @@ use Twig\Loader\ArrayLoader;
 use Twig\Markup as TwigMarkup;
 
 /**
- * Minimal safe-markup helper: treats a string as already-trusted HTML,
- * matching Drupal\Core\Render\Markup::create() semantics used by upstream
- * tests. Defined here so the test file has no dependency on drupal/core.
+ * Test-local marker interface mirroring Drupal\Component\Render\MarkupInterface
+ * without depending on drupal/core-render. The production package's own
+ * MarkupInterface (created in Task 7) lives under Drupal\Component\Attribute
+ * and serves consumers; this private fixture keeps tests decoupled from it.
  */
-final class Markup implements MarkupInterface, \Countable {
+interface MarkupInterface extends \JsonSerializable, \Stringable
+{
+    public function __toString(): string;
+}
 
-    use MarkupTrait;
+/**
+ * Test-local safe-markup helper reproducing enough of Drupal\Core\Render\Markup
+ * to drive the upstream AttributeTest scenarios. Implements Countable because
+ * the upstream test relies on it.
+ */
+final class Markup implements MarkupInterface, \Countable
+{
+    private function __construct(private readonly string $string) {}
 
+    public static function create(mixed $string): string|self
+    {
+        if ($string instanceof MarkupInterface) {
+            return $string;
+        }
+        $string = (string) $string;
+        if ($string === '') {
+            return '';
+        }
+        return new self($string);
+    }
+
+    public function __toString(): string
+    {
+        return $this->string;
+    }
+
+    public function count(): int
+    {
+        return mb_strlen($this->string);
+    }
+
+    public function jsonSerialize(): string
+    {
+        return $this->string;
+    }
 }
 
 /**
@@ -389,10 +424,10 @@ class AttributeTest extends TestCase {
 
     $string = '"> <script>alert(123)</script>"';
     $data['safe-object-xss1'] = [['title' => Markup::create($string)], ' title="&quot;&gt; alert(123)&quot;"'];
-    $data['non-safe-object-xss1'] = [['title' => $string], ' title="' . Html::escape($string) . '"'];
+    $data['non-safe-object-xss1'] = [['title' => $string], ' title="' . Escape::html($string) . '"'];
     $string = '&quot;><script>alert(123)</script>';
     $data['safe-object-xss2'] = [['title' => Markup::create($string)], ' title="&quot;&gt;alert(123)"'];
-    $data['non-safe-object-xss2'] = [['title' => $string], ' title="' . Html::escape($string) . '"'];
+    $data['non-safe-object-xss2'] = [['title' => $string], ' title="' . Escape::html($string) . '"'];
 
     // \Twig\Markup objects are generated when using twig defined variables
     // like `{% set xxx %}Foo{% endset %}`.
@@ -473,7 +508,10 @@ class AttributeTest extends TestCase {
    *   The number of results that are found.
    */
   protected function getXPathResultCount($query, $html): int {
-    $document = Html::load($html);
+    $document = new \DOMDocument();
+    $previous = libxml_use_internal_errors(TRUE);
+    @$document->loadHTML('<?xml encoding="UTF-8">' . $html);
+    libxml_use_internal_errors($previous);
     $xpath = new \DOMXPath($document);
 
     return $xpath->query($query)->length;
