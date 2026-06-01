@@ -20,10 +20,10 @@ final class NestedArray
      * handles non-array values differently. When merging values that are not both
      * arrays, the latter value replaces the former rather than merging with it.
      *
-     * @param array ...$arrays
+     * @param array<mixed> ...$arrays
      *   Arrays to merge.
      *
-     * @return array
+     * @return array<mixed>
      *   The merged array.
      *
      * @see NestedArray::mergeDeepArray()
@@ -40,13 +40,13 @@ final class NestedArray
      * input arrays are passed as a single array parameter rather than a variable
      * parameter list.
      *
-     * @param array $arrays
+     * @param array<array<mixed>> $arrays
      *   An array of arrays to merge.
      * @param bool $preserve_integer_keys
      *   (optional) If given, integer keys will be preserved and merged instead of
      *   appended. Defaults to FALSE.
      *
-     * @return array
+     * @return array<mixed>
      *   The merged array.
      *
      * @see NestedArray::mergeDeep()
