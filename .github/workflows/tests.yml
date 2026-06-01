@@ -26,3 +26,31 @@ jobs:
         run: vendor/bin/phpunit
       - name: PHPStan
         run: vendor/bin/phpstan analyse --no-progress
+
+  composer:
+    name: composer hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: composer validate --strict
+      - run: composer install --no-interaction --prefer-dist
+      - name: Audit dependencies for known advisories
+        run: composer audit --abandoned=report
+      - name: composer.json is normalized
+        run: composer normalize --dry-run
+
+  cs:
+    name: code style (PER-CS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer cs

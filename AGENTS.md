@@ -27,13 +27,18 @@ PHP ^8.3. Twig ^3.0. No Drupal dependencies, no Symfony dependencies beyond what
 ## Commands
 
 ```bash
-composer install
-vendor/bin/phpunit              # 41 tests / 110 assertions
-vendor/bin/phpstan analyse      # level 5, clean
+composer test                       # phpunit — 41 tests / 110 assertions
+composer phpstan                    # static analysis — level 5, clean
+composer cs                         # php-cs-fixer dry-run (PER-CS) — Parisek code only
+composer cs:fix                     # apply code style
+composer normalize                  # tidy composer.json
+composer audit --abandoned=report   # advisory scan (abandoned reported, not failed)
 composer validate --strict
 ```
 
-`composer.json` carries no `scripts` block — run the binaries directly.
+PHP-CS-Fixer is scoped to `AttributeExtension.php` + `tests/` only — the
+vendored Drupal classes in `src/` keep Drupal's 2-space style on purpose
+(see `.php-cs-fixer.dist.php`), so refreshes from upstream stay diff-able.
 
 ## CI
 
