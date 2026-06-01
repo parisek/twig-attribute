@@ -1,9 +1,12 @@
 parameters:
-    level: 5
+    level: 8
     paths:
-        - src
         - AttributeExtension.php
+        - src/Internal
     excludePaths:
         - vendor
         - .upstream (?)
+    scanDirectories:
+        - src
+        - vendor
     treatPhpDocTypesAsCertain: false

@@ -25,6 +25,9 @@ final class AttributeExtension extends AbstractExtension
         ];
     }
 
+    /**
+     * @param array<string, mixed> $attributes  Attribute name => value pairs.
+     */
     public function createAttribute(Environment $environment, array $attributes = []): AttributeCollection
     {
         return new AttributeCollection($attributes);
