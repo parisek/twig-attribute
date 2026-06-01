@@ -23,5 +23,9 @@
         "psr-4": {
             "Parisek\\Twig\\Tests\\": "tests"
         }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "phpstan": "vendor/bin/phpstan analyse"
     }
 }

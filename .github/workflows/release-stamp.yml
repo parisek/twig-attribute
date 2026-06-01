@@ -1,0 +1,116 @@
+name: Stamp Release
+
+# Manual release entrypoint. Stamps `[Unreleased]` in CHANGELOG to the
+# given version + date, runs the full test/PHPStan suite as a guard,
+# commits, tags, and pushes. The tag push then triggers `release.yml`
+# which creates the GitHub Release with notes derived from CHANGELOG.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New version (semver, e.g. 1.5.0 — without v prefix)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: write # dispatch release.yml in the final step (gh workflow run)
+
+jobs:
+  stamp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate inputs
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version must be semver X.Y.Z (without 'v' prefix); got: $VERSION"
+            exit 1
+          fi
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            echo "::error::tag v${VERSION} already exists"
+            exit 1
+          fi
+
+      - name: Validate CHANGELOG has [Unreleased] with content
+        run: |
+          if ! grep -q '^## \[Unreleased\]' CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no [Unreleased] section"
+            exit 1
+          fi
+          CONTENT=$(awk '
+            /^## \[Unreleased\]/{flag=1; next}
+            /^## \[/{flag=0}
+            flag
+          ' CHANGELOG.md | grep -v '^[[:space:]]*$' | head -1)
+          if [ -z "$CONTENT" ]; then
+            echo "::error::[Unreleased] section is empty — nothing to release"
+            exit 1
+          fi
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - run: composer install --no-interaction --prefer-dist
+
+      - name: Run tests
+        run: composer test
+
+      - name: Run PHPStan
+        run: composer phpstan
+
+      - name: Stamp CHANGELOG
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          # Replace `## [Unreleased]` with a fresh empty `[Unreleased]`
+          # block followed by the new stamped version block, so the next
+          # cycle has somewhere to accumulate entries. UTC date avoids
+          # off-by-one against the runner's local timezone.
+          python3 <<'PY'
+          import os, re, pathlib, datetime
+          version = os.environ['VERSION']
+          date    = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
+          path    = pathlib.Path('CHANGELOG.md')
+          text    = path.read_text()
+          replacement = f"## [Unreleased]\n\n## [{version}] - {date}"
+          new = re.sub(r'^## \[Unreleased\]', replacement, text, count=1, flags=re.M)
+          if new == text:
+              raise SystemExit("failed to stamp CHANGELOG (no [Unreleased] heading found)")
+          path.write_text(new)
+          PY
+
+      - name: Configure git identity
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+      - name: Commit, tag, push
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git add CHANGELOG.md
+          git commit -m "Release ${VERSION}"
+          git tag "v${VERSION}"
+          git push origin HEAD:main
+          git push origin "v${VERSION}"
+
+      - name: Trigger release workflow
+        # Tag pushes made by GITHUB_TOKEN don't fire downstream `on: push: tags`
+        # workflows by GitHub design. Dispatch release.yml explicitly instead —
+        # this requires the job's `actions: write` permission (declared above),
+        # or the API returns 403 "Resource not accessible by integration".
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh workflow run release.yml --field tag="v${VERSION}"
+          echo "Dispatched release.yml for v${VERSION}"
