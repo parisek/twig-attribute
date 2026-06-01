@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Raised the `twig/twig` floor to `^3.27` so consumers can't resolve a version affected by [CVE-2026-46634](https://symfony.com/cve-2026-46634) — a sandbox escape via `template_from_string()`, fixed in twig 3.27.
+
+### Changed
+
+- Adopted the shared parisek QA tooling: `composer audit` + `composer normalize` CI gates and a PHP-CS-Fixer (`@PER-CS`) `cs` check scoped to the Parisek-authored code (the vendored Drupal `src/` keeps its 2-space style). Dev-only; no consumer impact.
+
 ## [1.6.0] - 2026-05-25
 
 ### Added
