@@ -72,16 +72,15 @@ Level 5, not 6. Level 6 surfaces 17 `missingType.iterableValue` / `missingType.p
 - **CHANGELOG.md**: every behavior-affecting PR adds an entry under `## [Unreleased]` with [Keep a Changelog](https://keepachangelog.com/) categories.
 - **Squash-merge PRs** into `master` so the merge commit subject ends with `(#N)`. The existing tag history (`v1.0.0`–`v1.6.0`) is built on this convention.
 
-## Release process
+## Release process — DO NOT bypass
 
-Currently manual:
+Automated by two workflows (mirrors `parisek/timber-kit`). **Never stamp + tag manually** unless the workflow is broken:
 
-1. Stamp the `[Unreleased]` heading in `CHANGELOG.md` to `[X.Y.Z] - YYYY-MM-DD`.
-2. `git tag -a vX.Y.Z -m "..."` + `git push origin vX.Y.Z`.
-3. Packagist auto-imports (~60s; webhook wired).
-4. Create the GitHub Release (`gh release create vX.Y.Z --notes-file <(awk …)`) — use `--latest=false` for back-dated patches so they don't steal the Latest badge.
+1. Trigger **Stamp Release** (Actions tab → `Stamp Release` → Run workflow → enter `X.Y.Z`, no `v` prefix).
+2. It validates the version, requires a non-empty `[Unreleased]`, runs `composer test` + `composer phpstan` as guards, stamps `[Unreleased]` → `[X.Y.Z] - DATE` (UTC, leaving a fresh empty `[Unreleased]`), commits `Release X.Y.Z`, tags `vX.Y.Z`, pushes, then dispatches `release.yml`.
+3. `release.yml` extracts that tag's CHANGELOG section + the merged-PR list and creates the GitHub Release (`--latest` only when it's the highest semver, so back-dated patches don't steal the badge). Packagist auto-imports the tag (~60s; webhook wired).
 
-No release-automation workflow yet. If one lands, mirror `parisek/timber-kit`'s `release-stamp.yml` + `release.yml` shape.
+`release.yml` also runs on a manual `vX.Y.Z` tag push and via `workflow_dispatch` (re-generate notes for an existing tag).
 
 ## Style
 
