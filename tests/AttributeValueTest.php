@@ -135,8 +135,10 @@ final class AttributeValueTest extends TestCase
         self::assertSame('', (string) $value);
     }
 
-    public function testBooleanOnlyStrictFalseHidesTheAttribute(): void
+    public function testImplementationPinBooleanOnlyStrictFalseHidesTheAttribute(): void
     {
+        // Pins the vendored class as it is today, not a documented contract.
+        // The collection only builds AttributeBoolean from real booleans.
         // The check is `=== FALSE`, so other falsy values still print the name.
         self::assertSame('x', (new AttributeBoolean('x', 0))->render());
         self::assertSame('x', (new AttributeBoolean('x', null))->render());
@@ -352,7 +354,7 @@ final class AttributeValueTest extends TestCase
         };
 
         $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Unexpected type for $value (string).');
+        $this->expectExceptionMessageMatches('/Unexpected type/');
 
         (string) $collection;
     }

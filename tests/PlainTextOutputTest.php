@@ -45,8 +45,8 @@ final class PlainTextOutputTest extends TestCase
             'empty string' => ['', ''],
             'entities are decoded' => ['Tom & Jerry', 'Tom &amp; Jerry'],
             'single quote entity' => ["it's", 'it&#039;s'],
-            // Default flags are HTML 4.01, which has no &apos; entity.
-            'html5-only apos entity is kept' => ['it&apos;s', 'it&apos;s'],
+            // PHP default, not contract: HTML 4.01 flags have no &apos; entity.
+            'PHP default, not contract: apos entity is kept' => ['it&apos;s', 'it&apos;s'],
             'numeric hex entity' => ['A', '&#x41;'],
             'non-breaking space entity' => ["a\u{A0}b", 'a&nbsp;b'],
             'unknown entity is kept' => ['&bogus;', '&bogus;'],

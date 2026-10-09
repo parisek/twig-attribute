@@ -203,6 +203,15 @@ final class TwigIntegrationTest extends TestCase
         self::assertSame('<p title="&lt;t&gt;" hidden>', $this->render('<p{{ a }}>', ['a' => $collection]));
     }
 
+    public function testAutoescapeModeReachesTheHelper(): void
+    {
+        // Control for the paired cases above: the same helper must honour the mode.
+        $context = ['s' => 'a < b & c'];
+
+        self::assertSame('a &lt; b &amp; c', $this->render('{{ s }}', $context, 'html'));
+        self::assertSame('a < b & c', $this->render('{{ s }}', $context, false));
+    }
+
     public function testPlainStringsAreStillEscaped(): void
     {
         $output = $this->render('{{ s }}', ['s' => '<b title="x">']);
