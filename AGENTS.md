@@ -47,7 +47,7 @@ vendored Drupal classes in `src/` keep Drupal's 2-space style on purpose
 `.github/workflows/tests.yml` has three jobs: `test` (legs `PHP 8.3`, `PHP 8.4`, `PHP 8.5` and `PHP 8.4 / Twig ^4.0@alpha`; each runs `phpunit` + `phpstan`), `composer hygiene` (advisory audit + `composer normalize` check) and `code style (PER-CS)`. `.github/workflows/dependency-review.yml` runs on PRs.
 
 - Keep the leg names stable: `PHP 8.3` and `PHP 8.4` may be required checks. The Twig 4 leg adds ` / Twig <constraint>` to its name.
-- The Twig 4 leg runs `composer require --no-update twig/twig:^4.0@alpha` on the runner, then `composer update`. `composer.json` in the repo stays `^3.27`. The leg is not `continue-on-error`: Twig 4 alpha passes today, so a red leg is a real signal.
+- The Twig 4 leg runs `composer require --no-update "twig/twig:^4.0@alpha"` on the runner, then `composer install` (no lock file, so it resolves fresh). `composer.json` in the repo stays `^3.27`. The leg is not `continue-on-error`: Twig 4 alpha passes today, so a red leg is a real signal.
 - Dependabot uses `versioning-strategy: widen` for Composer. This library tracks no `composer.lock`, so Dependabot edits constraints only. `widen` adds the new major to the range and keeps the old lower bound.
 
 ## Refreshing from Drupal 11.x upstream
