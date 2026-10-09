@@ -5,17 +5,54 @@ declare(strict_types=1);
 namespace Parisek\Twig;
 
 use Drupal\Component\Attribute\AttributeCollection;
+use Drupal\Component\Attribute\MarkupInterface;
 use Twig\Environment;
 use Twig\Extension\AbstractExtension;
+use Twig\Runtime\EscaperRuntime;
 use Twig\TwigFilter;
 use Twig\TwigFunction;
 
 final class AttributeExtension extends AbstractExtension
 {
+    /** @var \WeakMap<Environment, true>|null */
+    private static ?\WeakMap $registered = null;
+
+    /**
+     * Tells the Twig escaper that objects implementing MarkupInterface are
+     * HTML-safe, as Drupal's escaper does.
+     *
+     * A Twig extension gets no hook with the environment, so the extension
+     * calls this itself the first time a template calls create_attribute() or
+     * the without filter. Call it once after creating the environment when a
+     * template prints a collection that only comes from PHP. Safe to call more
+     * than once. Strings and other Stringable values stay escaped.
+     */
+    public static function registerSafeClass(Environment $twig): void
+    {
+        self::$registered ??= new \WeakMap();
+
+        if (isset(self::$registered[$twig])) {
+            return;
+        }
+
+        $twig->getRuntime(EscaperRuntime::class)->addSafeClass(MarkupInterface::class, ['html']);
+        self::$registered[$twig] = true;
+    }
+
     public function getFilters(): array
     {
         return [
-            new TwigFilter('without', [$this, 'withoutFilter']),
+            // The filter itself is not marked safe. The collection is safe
+            // because of the class registration above.
+            new TwigFilter(
+                'without',
+                function (Environment $environment, mixed $element, mixed ...$keys): mixed {
+                    self::registerSafeClass($environment);
+
+                    return $this->withoutFilter($element, ...$keys);
+                },
+                ['needs_environment' => true],
+            ),
         ];
     }
 
@@ -38,6 +75,8 @@ final class AttributeExtension extends AbstractExtension
      */
     public function createAttribute(Environment $environment, array $attributes = []): AttributeCollection
     {
+        self::registerSafeClass($environment);
+
         return new AttributeCollection($attributes);
     }
 

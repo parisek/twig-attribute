@@ -18,8 +18,8 @@ A Twig 3 extension (`Parisek\Twig\AttributeExtension`) that exposes a `create_at
 
 - `src/` — vendored Drupal sources (`AttributeCollection`, `AttributeValueBase`, `AttributeArray`, `AttributeBoolean`, `AttributeString`, `MarkupInterface`).
 - `src/Internal/` — minimal shims that let the package drop `drupal/core-render` + `drupal/core-utility`: `Escape::html()`, `NestedArray::mergeDeep[Array]()`, `PlainTextOutput::renderFromHtml()`.
-- `AttributeExtension.php` — root-level, `final`, the Twig extension entrypoint. Registers the `create_attribute()` function and the `without` filter.
-- `tests/` — PHPUnit 10 or 11 (`composer.json` allows both). `AttributeTest.php` is the upstream Drupal test ported (alias `AttributeCollection as Attribute`); `EscapeTest.php` byte-matches against `htmlspecialchars`; `SmokeTest.php` exercises the Twig integration end-to-end.
+- `AttributeExtension.php` — root-level, `final`, the Twig extension entrypoint. Registers the `create_attribute()` function and the `without` filter, and registers `MarkupInterface` as an HTML-safe class in the Twig escaper (`registerSafeClass()`, called from both on first use; there is no environment hook).
+- `tests/` — PHPUnit 10 or 11 (`composer.json` allows both). `AttributeTest.php` is the upstream Drupal test ported (alias `AttributeCollection as Attribute`); `EscapeTest.php` byte-matches against `htmlspecialchars`; `SmokeTest.php` exercises the Twig integration end-to-end; `SafeClassTest.php` pins the autoescape behaviour (only `MarkupInterface` is safe).
 - `.upstream/` — gitignored scratch dir for the next refresh; fetch from `git.drupalcode.org/project/drupal/-/raw/11.x/core/lib/Drupal/Core/Template/`.
 
 PHP ^8.3. Twig ^3.27. No Drupal dependencies, no Symfony dependencies beyond what Twig itself pulls.

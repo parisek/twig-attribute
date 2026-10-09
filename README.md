@@ -69,6 +69,9 @@ the extension in its `StarterBase`. If you use the kit, you need no extra code.
 </div>
 ```
 
+Under Twig autoescape the attributes print as HTML, not as `&quot;` text. See
+[Autoescape](#autoescape).
+
 ```twig
 <div{{ create_attribute({'class': ['region', 'region--header']}) }}>
   {{ content }}
@@ -90,9 +93,27 @@ the named keys. It never changes the original. Pass one name, several names or a
 
 Unknown names are ignored. The behavior matches Drupal's `without` filter.
 
-The filter keeps Twig's escaping rules. It does not mark its output as safe.
-Under Twig autoescape, an attribute collection kept in a variable is escaped like
-any other value. Timber turns autoescape off by default.
+The filter itself is not marked safe. Its output is safe because the extension
+registers `MarkupInterface` as a safe class (see "Autoescape" below).
+
+### Autoescape
+
+With Twig autoescape on (for example `'autoescape' => 'html'`), the extension
+makes attribute collections print as HTML, without extra code. Only objects that
+implement the package's `MarkupInterface` are safe. Strings, other `Stringable`
+values and arrays stay escaped.
+
+The extension registers the safe class on the first call of `create_attribute()`
+or of the `without` filter. If a template prints a collection that comes only
+from PHP, and no such call ran before it, Twig escapes it. In that case call this
+once after you create the environment:
+
+```php
+\Parisek\Twig\AttributeExtension::registerSafeClass($twig);
+```
+
+The call is safe to repeat. Timber and `parisek/timber-kit` users need nothing:
+Timber turns autoescape off by default.
 
 The full API (class methods, escape semantics, `without` filter behavior) mirrors
 [Drupal's Attribute class](https://api.drupal.org/api/drupal/core%21lib%21Drupal%21Core%21Template%21Attribute.php/class/Attribute/11.x).

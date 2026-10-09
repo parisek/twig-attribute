@@ -230,13 +230,11 @@ final class WithoutFilterTest extends TestCase
         );
     }
 
-    public function testCollectionIsEscapedLikeThePlainVariableWhenAutoescapeIsOn(): void
+    public function testCollectionIsSafeWhenAutoescapeIsOn(): void
     {
-        $context = ['attributes' => $this->attributes()];
-
         self::assertSame(
-            $this->render('{{ attributes }}', $context, 'html'),
-            $this->render('{{ attributes|without }}', $context, 'html'),
+            ' id="socks" data-x="y"',
+            $this->render('{{ attributes|without("class") }}', ['attributes' => $this->attributes()], 'html'),
         );
     }
 }
