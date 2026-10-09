@@ -69,8 +69,11 @@ the extension in its `StarterBase`. If you use the kit, you need no extra code.
 </div>
 ```
 
-Under Twig autoescape, call `AttributeExtension::registerSafeClass($twig)` once,
-or the attributes print as `&quot;` text. See [Autoescape](#autoescape).
+`create_attribute()` and `without` register the safe class by themselves. Under
+Twig autoescape, call `AttributeExtension::registerSafeClass($twig)` once after
+`addExtension()` as well. Without it, a collection that prints before the first
+such call, or that Twig already escaped, prints as `&quot;` text. See
+[Autoescape](#autoescape).
 
 ```twig
 <div{{ create_attribute({'class': ['region', 'region--header']}) }}>

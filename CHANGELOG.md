@@ -30,12 +30,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - 543-LOC PHPUnit test suite ported from Drupal 11.x core `AttributeTest.php`
   (18 test methods, pure PHPUnit, no Drupal helpers). The package previously
   shipped zero tests.
-- New methods on `AttributeCollection` (additive — existing code unaffected):
-  - `hasAttribute(string $name): bool`
-  - `removeClass(...$classes): static`
-  - `getClass(): AttributeArray`
-  - `jsonSerialize(): string` (returns the rendered attribute string)
-  - `__clone()` for deep-clone correctness.
 - `Parisek\Twig\Internal\Escape::html()` — byte-identical inline replacement for
   Drupal's `Html::escape()` (5 LOC, `htmlspecialchars` with
   `ENT_QUOTES | ENT_SUBSTITUTE | 'UTF-8'`).
@@ -50,10 +44,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - Refreshed vendored `Drupal\Component\Attribute\*` classes from Drupal
-  11.x core. Existing method signatures and render output are preserved.
+  11.x core. Render output is preserved. Method signatures changed; see
+  "Upgrading from 1.5.x" below.
 - `AttributeExtension` is now `final` with `declare(strict_types=1)`.
   `createAttribute()` return type narrowed from `object` to
-  `AttributeCollection` (safe — class is `final`, no consumer can subclass).
+  `AttributeCollection`. The class is `final`, so a subclass of it breaks.
 
 ### Removed
 - **`drupal/core-render`** dropped from `require`. `MarkupInterface` is
@@ -64,26 +59,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `twig/twig ^2.4` support dropped. Twig 3+ only.
 
 ### Semver rationale
-Shipped as **1.6.0** rather than 2.0.0 because the tightened constraints
-(`php: ^8.3`, `twig/twig: ^3.0`) match what was already implied transitively
-by `drupal/core-utility ^10.0 || ^11.0` in 1.5.x — anyone who could install
-1.5.x against modern Drupal already had PHP 8.3+ and Twig 3+. The pruned
-`drupal/core-*` deps weren't reached by any external consumer through this
-package; consumers use the `create_attribute()` Twig function, not the Drupal
-classes directly.
+Shipped as **1.6.0** rather than 2.0.0. The new constraints (`php: ^8.3`,
+`twig/twig: ^3.0`) match `drupal/core-utility ^11.0`, and the package is
+consumed through the `create_attribute()` Twig function, not through the
+Drupal classes directly. 1.5.0 declared no PHP constraint and allowed Twig 2,
+so the install matrix did shrink. See "Upgrading from 1.5.x" below.
 
 #### Upgrading from 1.5.x
 
 Most consumers need no action. Run `composer update parisek/twig-attribute`.
-Existing methods keep their signatures and render output. A direct
-`new \Drupal\Component\Attribute\AttributeCollection(...)` call in PHP keeps
-working, because the refresh adds methods and removes none.
+Render output is the same. These changes can break code that goes beyond
+`create_attribute()`:
 
-Two cases may need action:
-
-- Your code reaches `Drupal\Component\Render\…` or
-  `Drupal\Component\Utility\…` classes through this package's transitive
-  install. Add the relevant `drupal/core-*` package to your own
-  `composer.json` `require`. Relying on a transitive package is fragile.
-- You run PHP below 8.3 or Twig 2. Raise PHP and Twig in your project, or pin
-  `parisek/twig-attribute` to `1.5.*`.
+- PHP: 1.5.0 declared no PHP constraint. 1.6.0 requires PHP ^8.3. On an older
+  PHP, pin `parisek/twig-attribute` to `1.5.*`.
+- Twig: 1.5.0 allowed `^2.4 || ^3.0`. 1.6.0 requires Twig 3. On Twig 2, pin to
+  `1.5.*`.
+- `AttributeExtension` is `final`. A subclass of it breaks.
+- Method signatures. `offsetGet()`, `offsetSet()`, `offsetUnset()`,
+  `offsetExists()`, `getIterator()` and `jsonSerialize()` now declare return
+  types, and `offsetSet()` declares `mixed $value`. `addClass()`,
+  `removeAttribute()` and `removeClass()` now declare `...$args` instead of
+  reading `func_get_args()`. A subclass that overrides these methods needs
+  matching signatures. The vendored files now use `declare(strict_types=1)`.
+- `offsetSet()` converts any `\Stringable` value to plain text with
+  `PlainTextOutput::renderFromHtml()`. In 1.5.0 only `MarkupInterface`
+  objects took this path.
+- `drupal/core-render` and `drupal/core-utility` are no longer required. If your
+  code uses `Drupal\Component\Render\...` or `Drupal\Component\Utility\...`
+  classes through this package, require the relevant `drupal/core-*` package
+  yourself.
