@@ -19,16 +19,18 @@ A Twig 3 extension (`Parisek\Twig\AttributeExtension`) that exposes a `create_at
 - `src/` — vendored Drupal sources (`AttributeCollection`, `AttributeValueBase`, `AttributeArray`, `AttributeBoolean`, `AttributeString`, `MarkupInterface`).
 - `src/Internal/` — minimal shims that let the package drop `drupal/core-render` + `drupal/core-utility`: `Escape::html()`, `NestedArray::mergeDeep[Array]()`, `PlainTextOutput::renderFromHtml()`.
 - `AttributeExtension.php` — root-level, `final`, the Twig extension entrypoint. Tiny wrapper.
-- `tests/` — PHPUnit 11. `AttributeTest.php` is the upstream Drupal test ported (alias `AttributeCollection as Attribute`); `EscapeTest.php` byte-matches against `htmlspecialchars`; `SmokeTest.php` exercises the Twig integration end-to-end.
+- `tests/` — PHPUnit 10 or 11 (`composer.json` allows both). `AttributeTest.php` is the upstream Drupal test ported (alias `AttributeCollection as Attribute`); `EscapeTest.php` byte-matches against `htmlspecialchars`; `SmokeTest.php` exercises the Twig integration end-to-end.
 - `.upstream/` — gitignored scratch dir for the next refresh; fetch from `git.drupalcode.org/project/drupal/-/raw/11.x/core/lib/Drupal/Core/Template/`.
 
-PHP ^8.3. Twig ^3.0. No Drupal dependencies, no Symfony dependencies beyond what Twig itself pulls.
+PHP ^8.3. Twig ^3.27. No Drupal dependencies, no Symfony dependencies beyond what Twig itself pulls.
+
+`composer.lock` is not tracked. This is a library: CI resolves the newest versions that `composer.json` allows, so an upstream break shows up on `main` early.
 
 ## Commands
 
 ```bash
 composer test                       # phpunit — 41 tests / 110 assertions
-composer phpstan                    # static analysis — level 5, clean
+composer phpstan                    # static analysis — level 8, clean
 composer cs                         # php-cs-fixer dry-run (PER-CS) — Parisek code only
 composer cs:fix                     # apply code style
 composer normalize                  # tidy composer.json
@@ -42,7 +44,7 @@ vendored Drupal classes in `src/` keep Drupal's 2-space style on purpose
 
 ## CI
 
-`.github/workflows/ci.yml` runs `phpunit` + `phpstan` on PHP 8.3 + 8.4 matrix. `.github/workflows/dependency-review.yml` runs on PRs.
+`.github/workflows/tests.yml` has three jobs: `PHP 8.3` and `PHP 8.4` (each runs `phpunit` + `phpstan`), `composer hygiene` (advisory audit + `composer normalize` check) and `code style (PER-CS)`. `.github/workflows/dependency-review.yml` runs on PRs.
 
 ## Refreshing from Drupal 11.x upstream
 
@@ -66,16 +68,12 @@ If a refresh would require a fifth shim or a shim exceeding ~30 LOC, stop and re
 
 ## PHPStan level
 
-Level 5, not 6. Level 6 surfaces 17 `missingType.iterableValue` / `missingType.parameter` / `missingType.return` errors against the ported Drupal sources (untyped `array` parameters / no inner generics). Upgrade path:
-
-1. Annotate `src/*.php` with `array<string, mixed>` / `array<int, string>` generics as appropriate.
-2. Remove `treatPhpDocTypesAsCertain: false` from `phpstan.neon` (added to silence a spurious `instanceof.alwaysTrue` in `__toString()`).
-3. Bump `phpstan.neon` to `level: 6`.
+Level 8. PHPStan analyses `AttributeExtension.php` and `src/Internal/` only. It scans `src/` for types but does not analyse it: the vendored Drupal sources keep their upstream docblocks, so analysing them would report untyped `array` parameters that a refresh from upstream would bring back.
 
 ## Per-PR conventions
 
 - **CHANGELOG.md**: every behavior-affecting PR adds an entry under `## [Unreleased]` with [Keep a Changelog](https://keepachangelog.com/) categories.
-- **Squash-merge PRs** into `master` so the merge commit subject ends with `(#N)`. The existing tag history (`v1.0.0`–`v1.6.0`) is built on this convention.
+- **Squash-merge PRs** into `main` so the merge commit subject ends with `(#N)`. The release notes build their pull request list from this suffix.
 
 ## Release process — DO NOT bypass
 
