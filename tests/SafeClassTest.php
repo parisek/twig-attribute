@@ -19,15 +19,25 @@ final class SafeClassTest extends TestCase
      */
     private function render(string $template, array $context = [], string|false $autoescape = 'html'): string
     {
-        return $this->environment($template, $autoescape)->render('t.twig', $context);
+        return $this->environment($template, $autoescape)->render(self::templateName($autoescape), $context);
     }
 
     private function environment(string $template, string|false $autoescape = 'html'): Environment
     {
-        $twig = new Environment(new ArrayLoader(['t.twig' => $template]), ['autoescape' => $autoescape]);
+        $twig = new Environment(new ArrayLoader([self::templateName($autoescape) => $template]), ['autoescape' => $autoescape]);
         $twig->addExtension(new AttributeExtension());
 
         return $twig;
+    }
+
+    /**
+     * Twig keys its compiled template class on the template name and source,
+     * not on the autoescape option. A different name per option keeps one
+     * test from reusing the template compiled by another.
+     */
+    private static function templateName(string|false $autoescape): string
+    {
+        return false === $autoescape ? 't-off.twig' : 't.twig';
     }
 
     private function stringable(): \Stringable
@@ -76,6 +86,7 @@ TWIG;
         self::assertSame(' class="y"&lt;b&gt;', $this->render($template, ['s' => '<b>']));
     }
 
+    /** Regression pin: passes with and without the registration. */
     public function testUserDefinedStringableStaysEscaped(): void
     {
         $template = '{% set a = create_attribute() %}{{ a }}{{ s }}';
@@ -83,6 +94,7 @@ TWIG;
         self::assertSame('&lt;b&gt;x&lt;/b&gt;', $this->render($template, ['s' => $this->stringable()]));
     }
 
+    /** Regression pin: passes with and without the registration. */
     public function testArrayStaysEscaped(): void
     {
         $template = '{% set a = create_attribute() %}{{ list|join("") }}';
@@ -90,6 +102,7 @@ TWIG;
         self::assertSame('&lt;b&gt;', $this->render($template, ['list' => ['<b>']]));
     }
 
+    /** Regression pin: passes with and without the registration. */
     public function testTwigMarkupStaysSafe(): void
     {
         $template = '{% set a = create_attribute() %}{{ m }}';
@@ -124,6 +137,7 @@ TWIG;
         self::assertSame(' id="i"', $this->render('{{ c|without("class") }}', ['c' => $collection]));
     }
 
+    /** Regression pin: passes with and without the registration. */
     public function testWithoutFilterOnStringIsEscaped(): void
     {
         self::assertSame('&lt;b&gt;', $this->render('{{ s|without }}', ['s' => '<b>']));
@@ -133,6 +147,7 @@ TWIG;
         );
     }
 
+    /** Regression pin: passes with and without the registration. */
     public function testWithoutFilterItselfIsNotMarkedSafe(): void
     {
         $filter = (new AttributeExtension())->getFilters()[0];
@@ -148,6 +163,7 @@ TWIG;
         self::assertSame(' id="i"', $twig->render('t.twig', ['c' => new AttributeCollection(['id' => 'i'])]));
     }
 
+    /** Regression pin: passes with and without the registration. */
     public function testCollectionFromContextIsEscapedUntilRegistered(): void
     {
         self::assertSame(
@@ -156,6 +172,7 @@ TWIG;
         );
     }
 
+    /** Regression pin: passes with and without the registration. */
     public function testAutoescapeOffIsUnchanged(): void
     {
         $template = '{% set a = create_attribute({"class": ["x"]}) %}<div{{ a.addClass("y") }}>{{ s }}';
@@ -163,15 +180,87 @@ TWIG;
         self::assertSame('<div class="x y"><b>', $this->render($template, ['s' => '<b>'], false));
     }
 
+    /**
+     * @return list<string>
+     */
+    private function htmlStrategies(Environment $twig, string $class = MarkupInterface::class): array
+    {
+        $runtime = $twig->getRuntime(\Twig\Runtime\EscaperRuntime::class);
+        $property = new \ReflectionProperty($runtime, 'safeClasses');
+
+        return $property->getValue($runtime)[$class] ?? [];
+    }
+
     public function testRegistrationIsIdempotent(): void
     {
         $twig = $this->environment('{{ c }}');
-        AttributeExtension::registerSafeClass($twig);
-        AttributeExtension::registerSafeClass($twig);
+
+        for ($i = 0; $i < 1000; ++$i) {
+            AttributeExtension::registerSafeClass($twig);
+        }
         $twig->render('t.twig', ['c' => new AttributeCollection()]);
 
-        $runtime = $twig->getRuntime(\Twig\Runtime\EscaperRuntime::class);
-        self::assertSame(['html'], $runtime->safeClasses[MarkupInterface::class]);
+        self::assertSame(['html'], $this->htmlStrategies($twig));
+        self::assertSame(['html'], $this->htmlStrategies($twig, AttributeCollection::class));
+    }
+
+    public function testRegistrationSurvivesAResetOfTheSafeClasses(): void
+    {
+        $twig = $this->environment('{{ c }}');
+        $context = ['c' => new AttributeCollection(['id' => 'i'])];
+
+        AttributeExtension::registerSafeClass($twig);
+        self::assertSame(' id="i"', $twig->render('t.twig', $context));
+
+        $twig->getRuntime(\Twig\Runtime\EscaperRuntime::class)->setSafeClasses([]);
+        self::assertSame(' id=&quot;i&quot;', $twig->render('t.twig', $context));
+
+        AttributeExtension::registerSafeClass($twig);
+        self::assertSame(' id="i"', $twig->render('t.twig', $context));
+        self::assertSame(['html'], $this->htmlStrategies($twig));
+    }
+
+    public function testLazyRegistrationDependsOnTheOrderOfCalls(): void
+    {
+        // The collection from the context prints before the first
+        // create_attribute() call: Twig escapes it (over-escaping, never raw).
+        // After the call the same class is safe.
+        $template = '{{ c }}|{% set a = create_attribute({"id": "n"}) %}{{ c }}';
+        $output = $this->render($template, ['c' => new AttributeCollection(['id' => 'i'])]);
+
+        self::assertSame(' id=&quot;i&quot;| id="i"', $output);
+    }
+
+    public function testHostileAttributeValueSubclassIsNotSanitised(): void
+    {
+        // Trust contract, as in Drupal: a custom AttributeValueBase subclass
+        // is developer code. Its output is printed as the class returns it.
+        $hostile = new class ('x', 'v') extends \Drupal\Component\Attribute\AttributeValueBase {
+            public function __toString(): string
+            {
+                return '"><script>alert(1)</script>';
+            }
+        };
+        $collection = new AttributeCollection();
+        $collection['x'] = $hostile;
+
+        self::assertStringContainsString(
+            '<script>alert(1)</script>',
+            $this->render('{% set a = create_attribute() %}{{ c }}', ['c' => $collection]),
+        );
+    }
+
+    public function testAttributeNameIsNotSanitised(): void
+    {
+        // Trust contract, as in Drupal: names are developer input. A name
+        // with whitespace and an equals sign injects a second attribute
+        // (the quotes are escaped, the space is not).
+        $output = $this->render(
+            '{% set a = create_attribute() %}{{ a.setAttribute(n, "v") }}',
+            ['n' => 'a="1" onclick'],
+        );
+
+        self::assertStringContainsString(' onclick="v"', $output);
     }
 
     public function testOneExtensionInstanceInTwoEnvironments(): void

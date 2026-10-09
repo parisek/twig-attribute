@@ -14,29 +14,34 @@ use Twig\TwigFunction;
 
 final class AttributeExtension extends AbstractExtension
 {
-    /** @var \WeakMap<Environment, true>|null */
-    private static ?\WeakMap $registered = null;
-
     /**
-     * Tells the Twig escaper that objects implementing MarkupInterface are
-     * HTML-safe, as Drupal's escaper does.
+     * Declares objects that implement MarkupInterface as trusted HTML in the
+     * Twig escaper: their whole __toString() output is printed raw.
      *
-     * A Twig extension gets no hook with the environment, so the extension
-     * calls this itself the first time a template calls create_attribute() or
-     * the without filter. Call it once after creating the environment when a
-     * template prints a collection that only comes from PHP. Safe to call more
-     * than once. Strings and other Stringable values stay escaped.
+     * Call it once after addExtension() when autoescape is on. The extension
+     * also calls it on the first create_attribute() or without call, but that
+     * is a fallback and depends on the order of calls in the template.
+     *
+     * The method asks the escaper whether the class is already safe, so it can
+     * be called any number of times and again after setSafeClasses() cleared
+     * the list. Strings, other Stringable values and arrays stay escaped.
      */
     public static function registerSafeClass(Environment $twig): void
     {
-        self::$registered ??= new \WeakMap();
+        $escaper = $twig->getRuntime(EscaperRuntime::class);
+        $probe = new AttributeCollection(['id' => 'p']);
 
-        if (isset(self::$registered[$twig])) {
+        // With $autoescape = true the escaper returns a safe object as the
+        // raw string. Anything else comes back escaped.
+        if ($escaper->escape($probe, 'html', null, true) === (string) $probe) {
             return;
         }
 
-        $twig->getRuntime(EscaperRuntime::class)->addSafeClass(MarkupInterface::class, ['html']);
-        self::$registered[$twig] = true;
+        $escaper->addSafeClass(MarkupInterface::class, ['html']);
+        // The escaper caches the lookup per exact class on the first escape
+        // and never refreshes it from the interface. The concrete class
+        // fixes a cache entry that an earlier escape already wrote.
+        $escaper->addSafeClass(AttributeCollection::class, ['html']);
     }
 
     public function getFilters(): array
