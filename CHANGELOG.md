@@ -12,7 +12,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Moved `AttributeExtension.php` from the repository root to `src/Twig/AttributeExtension.php`. The Composer autoload maps `Parisek\Twig\` to `src/Twig` now. The namespace, the class name and the public API do not change. Tools that read the file by path must use the new path.
+- **Layout change: `AttributeExtension.php` moved** from the repository root to `src/Twig/AttributeExtension.php`. The Composer autoload maps `Parisek\Twig\` to `src/Twig` now. The namespace, the class name and the public API do not change, so code that loads the class through the Composer autoloader needs no change.
+  - **Do not load the file by path.** `require_once 'vendor/parisek/twig-attribute/AttributeExtension.php'` is an anti-pattern, and it fails after this update. Use the autoloader (`vendor/autoload.php`) and `new \Parisek\Twig\AttributeExtension()`.
+  - **Clear compiled caches after updating.** A compiled Symfony container (`var/cache/`) can hold the old path. Run `bin/console cache:clear`, or delete `var/cache/`, if the container fails to boot after `composer update`.
 
 ### Fixed
 
