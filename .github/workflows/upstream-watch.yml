@@ -1,0 +1,103 @@
+name: Upstream watch
+
+# Compares the vendored classes in src/ with Drupal 11.x and flags new SA-CORE
+# commits. The script has no dependencies. See AGENTS.md, "Refreshing from
+# Drupal 11.x upstream".
+#
+# Two jobs, so the token that can write issues never meets a third-party
+# action: `check` runs the actions with read-only access; `report` runs only
+# the preinstalled `gh`. The actions here are pinned to a commit SHA.
+
+on:
+  schedule:
+    - cron: '17 5 * * 1' # Mondays, 05:17 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Compare with Drupal 11.x
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.check.outputs.code }}
+      body: ${{ steps.check.outputs.body }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.3'
+          coverage: none
+          github-token: ''
+      - name: Check upstream
+        id: check
+        # The script exits 0 (no drift) or 1 (drift or SA-CORE commit). Any other code
+        # (2 = download or parse error, 255 = PHP fatal) fails the step. Errexit is off
+        # only around the script call. A failure of cat, openssl or the write to
+        # GITHUB_OUTPUT fails the step too.
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/upstream-report.md"
+          set +e
+          php scripts/check-upstream.php > "$report"
+          code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then
+            cat "$report" || true
+            echo "::error::scripts/check-upstream.php exited with code $code. See the log above."
+            exit "$code"
+          fi
+          if [ "$code" -eq 1 ] && [ ! -s "$report" ]; then
+            echo "::error::scripts/check-upstream.php exited with code 1 but wrote no report."
+            exit 1
+          fi
+          cat "$report"
+          delimiter="EOF_$(openssl rand -hex 16)"
+          {
+            echo "code=$code"
+            echo "body<<$delimiter"
+            cat "$report"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+
+  report:
+    name: Open or update the issue
+    needs: check
+    if: needs.check.outputs.code == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      ISSUE_TITLE: Upstream Drupal changed the vendored Attribute classes
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      # The report reaches the shell as an environment variable, never as code.
+      REPORT_BODY: ${{ needs.check.outputs.body }}
+    steps:
+      - name: Open or update the issue
+        run: |
+          set -euo pipefail
+          report="$RUNNER_TEMP/upstream-report.md"
+          printf '%s\n' "$REPORT_BODY" > "$report"
+          # Only issues that the github-actions app created, so an issue with the same
+          # title by someone else is never overwritten. A failed lookup must stop the job:
+          # an empty answer would look like "no issue yet" and create a duplicate.
+          if ! issues=$(gh issue list --state open --label dependencies --limit 200 \
+            --app github-actions --json number,title); then
+            echo "::error::Issue lookup failed. No issue was created or changed."
+            exit 1
+          fi
+          number=$(printf '%s' "$issues" | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file "$report"
+          else
+            gh issue create --title "$ISSUE_TITLE" --label dependencies --body-file "$report"
+          fi
