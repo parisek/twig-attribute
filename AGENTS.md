@@ -18,7 +18,7 @@ A Twig 3 extension (`Parisek\Twig\AttributeExtension`) that exposes a `create_at
 
 - `src/` — vendored Drupal sources (`AttributeCollection`, `AttributeValueBase`, `AttributeArray`, `AttributeBoolean`, `AttributeString`, `MarkupInterface`).
 - `src/Internal/` — minimal shims that let the package drop `drupal/core-render` + `drupal/core-utility`: `Escape::html()`, `NestedArray::mergeDeep[Array]()`, `PlainTextOutput::renderFromHtml()`.
-- `AttributeExtension.php` — root-level, `final`, the Twig extension entrypoint. Registers the `create_attribute()` function and the `without` filter, and `registerSafeClass()`, which declares `MarkupInterface` (and `AttributeCollection`) HTML-safe in the Twig escaper. The explicit call right after `addExtension()`, before rendering, is the contract; objects (and subclasses) Twig already escaped in that environment stay escaped. Both entry points call it too, as an order-dependent fallback (an extension has no environment hook). Twig caches the safe lookup per exact class on first escape, so the concrete class is registered as well; the probe in `registerSafeClass()` stays valid after `setSafeClasses([])`.
+- `src/Twig/AttributeExtension.php` — namespace `Parisek\Twig` (Composer maps it to `src/Twig`), `final`, the Twig extension entrypoint. Registers the `create_attribute()` function and the `without` filter, and `registerSafeClass()`, which declares `MarkupInterface` (and `AttributeCollection`) HTML-safe in the Twig escaper. The explicit call right after `addExtension()`, before rendering, is the contract; objects (and subclasses) Twig already escaped in that environment stay escaped. Both entry points call it too, as an order-dependent fallback (an extension has no environment hook). Twig caches the safe lookup per exact class on first escape, so the concrete class is registered as well; the probe in `registerSafeClass()` stays valid after `setSafeClasses([])`.
 - `tests/` — PHPUnit 10, 11 or 12 (`composer.json` allows all three). `AttributeTest.php` is the upstream Drupal test ported (alias `AttributeCollection as Attribute`); `EscapeTest.php` byte-matches against `htmlspecialchars`; `SmokeTest.php` exercises the Twig integration end-to-end; `SafeClassTest.php` pins the autoescape behaviour (only `MarkupInterface` is safe).
 - `scripts/check-upstream.php` — the upstream watch (see "Refreshing"). `tests/UpstreamCheckTest.php` runs it against `tests/fixtures/upstream-watch/upstream/*.php.txt`, a snapshot of the upstream version `src/` was last refreshed from.
 - `.upstream/` — gitignored scratch dir for the next refresh; fetch from `git.drupalcode.org/project/drupal/-/raw/11.x/core/lib/Drupal/Core/Template/`.
@@ -39,7 +39,7 @@ composer audit --abandoned=report   # advisory scan (abandoned reported, not fai
 composer validate --strict
 ```
 
-PHP-CS-Fixer is scoped to `AttributeExtension.php` + `tests/` only — the
+PHP-CS-Fixer is scoped to `src/Twig/` + `scripts/` + `tests/` only — the
 vendored Drupal classes in `src/` keep Drupal's 2-space style on purpose
 (see `.php-cs-fixer.dist.php`), so refreshes from upstream stay diff-able.
 
@@ -84,7 +84,7 @@ If a refresh would require a fifth shim or a shim exceeding ~30 LOC, stop and re
 
 ## PHPStan level
 
-Level 8. PHPStan analyses `AttributeExtension.php` and `src/Internal/` only. It scans `src/` for types but does not analyse it: the vendored Drupal sources keep their upstream docblocks, so analysing them would report untyped `array` parameters that a refresh from upstream would bring back.
+Level 8. PHPStan analyses `src/Twig/`, `src/Internal/` and `scripts/` only. It scans `src/` for types but does not analyse it: the vendored Drupal sources keep their upstream docblocks, so analysing them would report untyped `array` parameters that a refresh from upstream would bring back.
 
 ## Per-PR conventions
 
@@ -104,5 +104,5 @@ Automated by two workflows (mirrors `parisek/timber-kit`). **Never stamp + tag m
 ## Style
 
 - Vendored sources in `src/` keep Drupal core's indent (2-space) and brace style. Don't reformat — refresh diffs stay readable.
-- Our own code (`src/Internal/`, `src/MarkupInterface.php`, `AttributeExtension.php`, `tests/`) is PSR-12, 4-space indent, `final` by default, `declare(strict_types=1);` at top.
+- Our own code (`src/Internal/`, `src/MarkupInterface.php`, `src/Twig/`, `tests/`) is PSR-12, 4-space indent, `final` by default, `declare(strict_types=1);` at top.
 - WHY-not-WHAT comments. Don't reference task numbers / PRs / call sites in code comments — those rot.

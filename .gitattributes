@@ -1,5 +1,5 @@
 # Distribution: keep `composer require` lean — only the namespaced PHP
-# (src/ + the root AttributeExtension.php), composer.json, LICENSE.txt and
+# (src/, including src/Twig/AttributeExtension.php), composer.json, LICENSE.txt and
 # README.md ship; everything below is dev-only.
 /.github             export-ignore
 /.gitattributes      export-ignore
