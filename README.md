@@ -90,6 +90,10 @@ the named keys. It never changes the original. Pass one name, several names or a
 
 Unknown names are ignored. The behavior matches Drupal's `without` filter.
 
+The filter keeps Twig's escaping rules. It does not mark its output as safe.
+Under Twig autoescape, an attribute collection kept in a variable is escaped like
+any other value. Timber turns autoescape off by default.
+
 The full API (class methods, escape semantics, `without` filter behavior) mirrors
 [Drupal's Attribute class](https://api.drupal.org/api/drupal/core%21lib%21Drupal%21Core%21Template%21Attribute.php/class/Attribute/11.x).
 

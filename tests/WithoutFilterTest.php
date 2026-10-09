@@ -24,9 +24,9 @@ final class WithoutFilterTest extends TestCase
     /**
      * @param array<string, mixed> $context
      */
-    private function render(string $template, array $context = []): string
+    private function render(string $template, array $context = [], string|false $autoescape = false): string
     {
-        $twig = new Environment(new ArrayLoader(['t.twig' => $template]));
+        $twig = new Environment(new ArrayLoader(['t.twig' => $template]), ['autoescape' => $autoescape]);
         $twig->addExtension(new AttributeExtension());
 
         return $twig->render('t.twig', $context);
@@ -194,6 +194,49 @@ final class WithoutFilterTest extends TestCase
         self::assertSame(
             ' title="&lt;b&gt;&quot;x&quot; &amp; y&lt;/b&gt;"',
             (string) (new AttributeExtension())->withoutFilter($attributes, 'class'),
+        );
+    }
+
+    public function testStringWithoutKeysStaysHtmlEscaped(): void
+    {
+        $payload = '<img src=x onerror=alert(1)>';
+
+        self::assertSame(
+            '&lt;img src=x onerror=alert(1)&gt;',
+            $this->render('{{ val|without }}', ['val' => $payload], 'html'),
+        );
+    }
+
+    public function testUserDefinedStringableStaysHtmlEscaped(): void
+    {
+        $stringable = new class implements \Stringable {
+            public function __toString(): string
+            {
+                return '<b>x</b>';
+            }
+        };
+
+        self::assertSame(
+            '&lt;b&gt;x&lt;/b&gt;',
+            $this->render('{{ val|without }}', ['val' => $stringable], 'html'),
+        );
+    }
+
+    public function testCollectionRendersRawWhenAutoescapeIsOff(): void
+    {
+        self::assertSame(
+            ' id="socks" data-x="y"',
+            $this->render('{{ attributes|without("class") }}', ['attributes' => $this->attributes()], false),
+        );
+    }
+
+    public function testCollectionIsEscapedLikeThePlainVariableWhenAutoescapeIsOn(): void
+    {
+        $context = ['attributes' => $this->attributes()];
+
+        self::assertSame(
+            $this->render('{{ attributes }}', $context, 'html'),
+            $this->render('{{ attributes|without }}', $context, 'html'),
         );
     }
 }

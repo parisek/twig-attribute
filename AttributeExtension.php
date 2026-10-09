@@ -15,11 +15,7 @@ final class AttributeExtension extends AbstractExtension
     public function getFilters(): array
     {
         return [
-            new TwigFilter(
-                'without',
-                [$this, 'withoutFilter'],
-                ['is_safe' => ['html']],
-            ),
+            new TwigFilter('without', [$this, 'withoutFilter']),
         ];
     }
 
