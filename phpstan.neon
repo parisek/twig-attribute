@@ -3,6 +3,7 @@ parameters:
     paths:
         - AttributeExtension.php
         - src/Internal
+        - scripts
     excludePaths:
         - vendor
         - .upstream (?)

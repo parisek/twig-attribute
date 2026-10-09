@@ -20,6 +20,7 @@ A Twig 3 extension (`Parisek\Twig\AttributeExtension`) that exposes a `create_at
 - `src/Internal/` — minimal shims that let the package drop `drupal/core-render` + `drupal/core-utility`: `Escape::html()`, `NestedArray::mergeDeep[Array]()`, `PlainTextOutput::renderFromHtml()`.
 - `AttributeExtension.php` — root-level, `final`, the Twig extension entrypoint. Registers the `create_attribute()` function and the `without` filter, and `registerSafeClass()`, which declares `MarkupInterface` (and `AttributeCollection`) HTML-safe in the Twig escaper. The explicit call right after `addExtension()`, before rendering, is the contract; objects (and subclasses) Twig already escaped in that environment stay escaped. Both entry points call it too, as an order-dependent fallback (an extension has no environment hook). Twig caches the safe lookup per exact class on first escape, so the concrete class is registered as well; the probe in `registerSafeClass()` stays valid after `setSafeClasses([])`.
 - `tests/` — PHPUnit 10, 11 or 12 (`composer.json` allows all three). `AttributeTest.php` is the upstream Drupal test ported (alias `AttributeCollection as Attribute`); `EscapeTest.php` byte-matches against `htmlspecialchars`; `SmokeTest.php` exercises the Twig integration end-to-end; `SafeClassTest.php` pins the autoescape behaviour (only `MarkupInterface` is safe).
+- `scripts/check-upstream.php` — the upstream watch (see "Refreshing"). `tests/UpstreamCheckTest.php` runs it against `tests/fixtures/upstream-watch/upstream/*.php.txt`, a snapshot of the upstream version `src/` was last refreshed from.
 - `.upstream/` — gitignored scratch dir for the next refresh; fetch from `git.drupalcode.org/project/drupal/-/raw/11.x/core/lib/Drupal/Core/Template/`.
 
 PHP ^8.3. Twig ^3.27. No Drupal dependencies, no Symfony dependencies beyond what Twig itself pulls.
@@ -53,6 +54,15 @@ vendored Drupal classes in `src/` keep Drupal's 2-space style on purpose
 ## Refreshing from Drupal 11.x upstream
 
 The five source files in `src/` are vendored from Drupal core. When upstream changes meaningfully:
+
+**Watch.** `.github/workflows/upstream-watch.yml` runs weekly (and on `workflow_dispatch`). It runs `php scripts/check-upstream.php` (plain PHP, no dependencies) and, on exit 1, opens or updates ONE issue, "Upstream Drupal changed the vendored Attribute classes", label `dependencies`. It never closes the issue. Two jobs: `check` (read-only token, runs the actions) and `report` (`issues: write`, runs only `gh`). Its actions are pinned to commit SHAs (Dependabot updates them). Exit 2 (download or parse error) fails the job and opens no issue.
+
+- Run it by hand: `php scripts/check-upstream.php`. Exit 0 = no functional drift, 1 = drift or a new `SA-CORE` commit, 2 = error. The Markdown report is on stdout. Options: `--upstream=DIR|URL`, `--src=DIR`, `--commits=api|none|DIR`, `--reviewed=FILE`.
+- It normalizes the intended differences in upstream, then compares token by token with `src/`: namespace `Drupal\Core\Template` → `Drupal\Component\Attribute`; class `Attribute` → `AttributeCollection`; `Html::escape` → `Escape::html`; `use` lines for `Html`, `PlainTextOutput`, `NestedArray` swapped to `Parisek\Twig\Internal\*`; `use` lines for `MarkupInterface` and `JsonSchema` dropped; the `#[JsonSchema(...)]` attribute dropped; `declare(strict_types=1)` ignored; `offsetSet($name, mixed $value)` signature. Comments and whitespace never count. A change inside any statement does. The rules are the constants `USE_MAP`, `LINE_MAP` and `DROPPED_ATTRIBUTES` in the script. A new deliberate edit in `src/` needs a new rule there, or the watch reports it as drift.
+- `.upstream-reviewed` (JSON: `commit`, `date`, `reviewed_by`, `title`) is the newest upstream commit on the five files that a human has reviewed. The script lists commits newer than it. An `SA-CORE` commit in that list makes the run exit 1 until the marker moves. Other new commits are listed but do not fail the run.
+- After you review and port upstream changes: run `php scripts/check-upstream.php --mark-reviewed="Your Name"`. It refuses while functional drift exists. Commit `.upstream-reviewed` with the port, and refresh the snapshot in `tests/fixtures/upstream-watch/upstream/` (`<Name>.php.txt`) from the same fetch.
+
+Manual refresh steps:
 
 1. Fetch all 6 files (5 sources + the upstream test) into `.upstream/` from `git.drupalcode.org/project/drupal/-/raw/11.x/core/lib/Drupal/Core/Template/` and `core/tests/Drupal/Tests/Core/Template/`.
 2. Audit `grep -hE "^use Drupal\\\\(Component|Core)\\\\" .upstream/*.php | sort -u`. Outside symbols must terminate in PHP builtins via inline shim, **not** pull `drupal/core-*` back in.

@@ -1,0 +1,88 @@
+name: Upstream watch
+
+# Compares the vendored classes in src/ with Drupal 11.x and flags new SA-CORE
+# commits. The script has no dependencies. See AGENTS.md, "Refreshing from
+# Drupal 11.x upstream".
+#
+# Two jobs, so the token that can write issues never meets a third-party
+# action: `check` runs the actions with read-only access; `report` runs only
+# the preinstalled `gh`. The actions here are pinned to a commit SHA.
+
+on:
+  schedule:
+    - cron: '17 5 * * 1' # Mondays, 05:17 UTC
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: upstream-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Compare with Drupal 11.x
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      code: ${{ steps.check.outputs.code }}
+      body: ${{ steps.check.outputs.body }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: '8.3'
+          coverage: none
+          github-token: ''
+      - name: Check upstream
+        id: check
+        # The script exits 0 (no drift), 1 (drift or SA-CORE commit) or 2 (error).
+        # The step records the code and the report, then the last step fails on 2.
+        run: |
+          set +e
+          report="$RUNNER_TEMP/upstream-report.md"
+          php scripts/check-upstream.php > "$report"
+          code=$?
+          cat "$report"
+          delimiter="EOF_$(openssl rand -hex 16)"
+          {
+            echo "code=$code"
+            echo "body<<$delimiter"
+            cat "$report"
+            echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Fail on a download or parse error
+        if: steps.check.outputs.code == '2'
+        run: |
+          echo "::error::scripts/check-upstream.php could not download or parse a file. See the log of the previous step."
+          exit 1
+
+  report:
+    name: Open or update the issue
+    needs: check
+    if: needs.check.outputs.code == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      ISSUE_TITLE: Upstream Drupal changed the vendored Attribute classes
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      # The report reaches the shell as an environment variable, never as code.
+      REPORT_BODY: ${{ needs.check.outputs.body }}
+    steps:
+      - name: Open or update the issue
+        run: |
+          report="$RUNNER_TEMP/upstream-report.md"
+          printf '%s\n' "$REPORT_BODY" > "$report"
+          number=$(gh issue list --state open --label dependencies --json number,title \
+            --jq '[.[] | select(.title == env.ISSUE_TITLE)][0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file "$report"
+          else
+            gh issue create --title "$ISSUE_TITLE" --label dependencies --body-file "$report"
+          fi
