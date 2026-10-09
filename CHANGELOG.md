@@ -6,6 +6,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+**Read before updating.** Two changes can break existing code. Everything else is new or fixed behavior that needs no change on your side.
+
+1. **Attribute names are validated** (see Security below). *What:* a name that is empty or contains whitespace, a control character or any of `" ' < > / =` now throws `\InvalidArgumentException`. *Why:* Drupal escapes a name as text only, so a name such as `x onmouseover` rendered as two attributes. *You are affected* only if your code passes such a name. Names like `@click`, `:class` and `[hidden]` still work.
+2. **`AttributeExtension.php` moved to `src/Twig/`** (see Changed below). *What:* the file has a new path. *Why:* the root autoload mapping made the autoloader scan the whole repository root, and the file shipped next to config files. *You are affected* only if you load the file by path instead of through the Composer autoloader, or if a compiled Symfony container holds the old path. Clear `var/cache/` after `composer update`.
+
 ### Added
 
 - `without` Twig filter, with the semantics of Drupal core's `TwigExtension::withoutFilter()`. `{{ attributes|without('class') }}` renders a copy of the collection (or a plain array) without the named keys and leaves the original unchanged. The README and the `AttributeCollection` docblock already described this filter, but the package did not register it.
