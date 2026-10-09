@@ -6,9 +6,8 @@ declare(strict_types=1);
 // (Drupal\Component\Attribute\*) deliberately keep Drupal's 2-space style so
 // upstream refreshes stay diff-able; they are NOT formatted here.
 $finder = PhpCsFixer\Finder::create()
-    ->in([__DIR__ . '/tests', __DIR__ . '/scripts'])
+    ->in([__DIR__ . '/tests', __DIR__ . '/scripts', __DIR__ . '/src/Twig'])
     ->exclude('fixtures')
-    ->append([__DIR__ . '/AttributeExtension.php'])
     ->name('*.php');
 
 return (new PhpCsFixer\Config())

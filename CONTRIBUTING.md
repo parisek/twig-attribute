@@ -23,7 +23,7 @@ composer audit --abandoned=report
 composer normalize --dry-run
 ```
 
-`composer cs` covers `AttributeExtension.php` and `tests/` only. The vendored Drupal classes in `src/` keep Drupal's 2-space style on purpose. Do not reformat them.
+`composer cs` covers `src/Twig/`, `scripts/` and `tests/` only. The vendored Drupal classes in `src/` keep Drupal's 2-space style on purpose. Do not reformat them.
 
 ## Pull requests
 

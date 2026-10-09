@@ -1,7 +1,7 @@
 parameters:
     level: 8
     paths:
-        - AttributeExtension.php
+        - src/Twig
         - src/Internal
         - scripts
     excludePaths:

@@ -10,6 +10,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `without` Twig filter, with the semantics of Drupal core's `TwigExtension::withoutFilter()`. `{{ attributes|without('class') }}` renders a copy of the collection (or a plain array) without the named keys and leaves the original unchanged. The README and the `AttributeCollection` docblock already described this filter, but the package did not register it.
 
+### Changed
+
+- **Layout change: `AttributeExtension.php` moved** from the repository root to `src/Twig/AttributeExtension.php`. The Composer autoload maps `Parisek\Twig\` to `src/Twig` now. The namespace, the class name and the public API do not change, so code that loads the class through the Composer autoloader needs no change.
+  - **Do not load the file by path.** `require_once 'vendor/parisek/twig-attribute/AttributeExtension.php'` is an anti-pattern, and it fails after this update. Use the autoloader (`vendor/autoload.php`) and `new \Parisek\Twig\AttributeExtension()`.
+  - **Clear compiled caches after updating.** A compiled Symfony container (`var/cache/`) can hold the old path. Run `bin/console cache:clear`, or delete `var/cache/`, if the container fails to boot after `composer update`.
+
 ### Fixed
 
 - An attribute collection kept in a variable, for example `{% set a = create_attribute() %}<div{{ a.addClass("x") }}>`, was escaped a second time under Twig autoescape. New `AttributeExtension::registerSafeClass($twig)` declares `MarkupInterface` objects as HTML in the Twig escaper. Call it right after `addExtension()`, before anything is rendered, when autoescape is on. Objects that Twig already escaped in that environment keep being escaped, including subclasses of `AttributeCollection`. Strings, other `Stringable` values and arrays stay escaped. As a fallback the extension calls it on the first `create_attribute()` or `without` call; that fallback depends on the order of calls. Timber and `timber-kit` (autoescape off) need nothing. A `MarkupInterface` class is trusted HTML; attribute names and custom `AttributeValueBase` subclasses stay trusted developer input, as in Drupal.
