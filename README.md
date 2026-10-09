@@ -75,6 +75,21 @@ the extension in its `StarterBase`. If you use the kit, you need no extra code.
 </div>
 ```
 
+### Filters
+
+`without` returns a copy of an attribute collection (or a plain array) without
+the named keys. It never changes the original. Pass one name, several names or a list.
+
+```twig
+<div class="{{ attributes.class }} my-class"{{ attributes|without('class') }}>
+  {{ content }}
+</div>
+{{ attributes|without('class', 'id') }}
+{{ attributes|without(['class', 'id']) }}
+```
+
+Unknown names are ignored. The behavior matches Drupal's `without` filter.
+
 The full API (class methods, escape semantics, `without` filter behavior) mirrors
 [Drupal's Attribute class](https://api.drupal.org/api/drupal/core%21lib%21Drupal%21Core%21Template%21Attribute.php/class/Attribute/11.x).
 

@@ -6,6 +6,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `without` Twig filter, with the semantics of Drupal core's `TwigExtension::withoutFilter()`. `{{ attributes|without('class') }}` renders a copy of the collection (or a plain array) without the named keys and leaves the original unchanged. The README and the `AttributeCollection` docblock already described this filter, but the package did not register it.
+
 ## [1.6.1] - 2026-06-01
 
 ### Security
