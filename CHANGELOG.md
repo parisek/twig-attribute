@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-09
+
 **Read before updating.** Two changes can break existing code. Everything else is new or fixed behavior that needs no change on your side.
 
 1. **Attribute names are validated** (see Security below). *What:* a name that is empty or contains whitespace, a control character or any of `" ' < > / =` now throws `\InvalidArgumentException`. *Why:* Drupal escapes a name as text only, so a name such as `x onmouseover` rendered as two attributes. *You are affected* only if your code passes such a name. Names like `@click`, `:class` and `[hidden]` still work.
