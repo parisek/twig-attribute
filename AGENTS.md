@@ -29,7 +29,7 @@ PHP ^8.3. Twig ^3.27. No Drupal dependencies, no Symfony dependencies beyond wha
 ## Commands
 
 ```bash
-composer test                       # phpunit — 58 tests / 137 assertions
+composer test                       # phpunit
 composer phpstan                    # static analysis — level 8, clean
 composer cs                         # php-cs-fixer dry-run (PER-CS) — Parisek code only
 composer cs:fix                     # apply code style
