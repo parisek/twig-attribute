@@ -6,7 +6,6 @@
 /.gitignore          export-ignore
 /.vscode             export-ignore
 /.upstream           export-ignore
-/composer.lock       export-ignore
 /phpunit.xml.dist    export-ignore
 /phpstan.neon        export-ignore
 /tests               export-ignore
