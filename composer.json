@@ -20,7 +20,7 @@
         "ergebnis/composer-normalize": "^2.0",
         "friendsofphp/php-cs-fixer": "^3.0",
         "phpstan/phpstan": "^2.0",
-        "phpunit/phpunit": "^10.0 || ^11.0"
+        "phpunit/phpunit": "^10.0 || ^11.0 || ^12.0"
     },
     "autoload": {
         "psr-4": {

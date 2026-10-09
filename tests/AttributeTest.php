@@ -87,7 +87,7 @@ class AttributeTest extends TestCase
         $this->assertEquals(new AttributeArray('class', ['example-class']), $attribute['class']);
 
         // Test that safe string objects work correctly.
-        $safe_string = $this->createMock(MarkupInterface::class);
+        $safe_string = $this->createStub(MarkupInterface::class);
         $safe_string->method('__toString')->willReturn('example-class');
         $attribute = new Attribute(['class' => $safe_string]);
         $this->assertTrue(isset($attribute['class']));

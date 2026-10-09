@@ -19,7 +19,7 @@ A Twig 3 extension (`Parisek\Twig\AttributeExtension`) that exposes a `create_at
 - `src/` — vendored Drupal sources (`AttributeCollection`, `AttributeValueBase`, `AttributeArray`, `AttributeBoolean`, `AttributeString`, `MarkupInterface`).
 - `src/Internal/` — minimal shims that let the package drop `drupal/core-render` + `drupal/core-utility`: `Escape::html()`, `NestedArray::mergeDeep[Array]()`, `PlainTextOutput::renderFromHtml()`.
 - `AttributeExtension.php` — root-level, `final`, the Twig extension entrypoint. Registers the `create_attribute()` function and the `without` filter, and `registerSafeClass()`, which declares `MarkupInterface` (and `AttributeCollection`) HTML-safe in the Twig escaper. The explicit call right after `addExtension()`, before rendering, is the contract; objects (and subclasses) Twig already escaped in that environment stay escaped. Both entry points call it too, as an order-dependent fallback (an extension has no environment hook). Twig caches the safe lookup per exact class on first escape, so the concrete class is registered as well; the probe in `registerSafeClass()` stays valid after `setSafeClasses([])`.
-- `tests/` — PHPUnit 10 or 11 (`composer.json` allows both). `AttributeTest.php` is the upstream Drupal test ported (alias `AttributeCollection as Attribute`); `EscapeTest.php` byte-matches against `htmlspecialchars`; `SmokeTest.php` exercises the Twig integration end-to-end; `SafeClassTest.php` pins the autoescape behaviour (only `MarkupInterface` is safe).
+- `tests/` — PHPUnit 10, 11 or 12 (`composer.json` allows all three). `AttributeTest.php` is the upstream Drupal test ported (alias `AttributeCollection as Attribute`); `EscapeTest.php` byte-matches against `htmlspecialchars`; `SmokeTest.php` exercises the Twig integration end-to-end; `SafeClassTest.php` pins the autoescape behaviour (only `MarkupInterface` is safe).
 - `.upstream/` — gitignored scratch dir for the next refresh; fetch from `git.drupalcode.org/project/drupal/-/raw/11.x/core/lib/Drupal/Core/Template/`.
 
 PHP ^8.3. Twig ^3.27. No Drupal dependencies, no Symfony dependencies beyond what Twig itself pulls.
@@ -44,7 +44,11 @@ vendored Drupal classes in `src/` keep Drupal's 2-space style on purpose
 
 ## CI
 
-`.github/workflows/tests.yml` has three jobs: `PHP 8.3` and `PHP 8.4` (each runs `phpunit` + `phpstan`), `composer hygiene` (advisory audit + `composer normalize` check) and `code style (PER-CS)`. `.github/workflows/dependency-review.yml` runs on PRs.
+`.github/workflows/tests.yml` has three jobs: `test` (legs `PHP 8.3`, `PHP 8.4`, `PHP 8.5` and `PHP 8.4 / Twig ^4.0@alpha`; each runs `phpunit` + `phpstan`), `composer hygiene` (advisory audit + `composer normalize` check) and `code style (PER-CS)`. `.github/workflows/dependency-review.yml` runs on PRs.
+
+- Keep the leg names stable: `PHP 8.3` and `PHP 8.4` may be required checks. The Twig 4 leg adds ` / Twig <constraint>` to its name.
+- The Twig 4 leg runs `composer require --no-update twig/twig:^4.0@alpha` on the runner, then `composer update`. `composer.json` in the repo stays `^3.27`. The leg is not `continue-on-error`: Twig 4 alpha passes today, so a red leg is a real signal.
+- Dependabot uses `versioning-strategy: widen` for Composer. This library tracks no `composer.lock`, so Dependabot edits constraints only. `widen` adds the new major to the range and keeps the old lower bound.
 
 ## Refreshing from Drupal 11.x upstream
 
