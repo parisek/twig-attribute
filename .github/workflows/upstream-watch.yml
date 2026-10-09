@@ -39,14 +39,26 @@ jobs:
           github-token: ''
       - name: Check upstream
         id: check
-        # The script exits 0 (no drift), 1 (drift or SA-CORE commit) or 2 (error).
-        # The step records the code and the report, then the last step fails on 2.
+        # The script exits 0 (no drift) or 1 (drift or SA-CORE commit). Any other code
+        # (2 = download or parse error, 255 = PHP fatal) fails the step. Errexit is off
+        # only around the script call. A failure of cat, openssl or the write to
+        # GITHUB_OUTPUT fails the step too.
         run: |
           set -euo pipefail
-          set +e
           report="$RUNNER_TEMP/upstream-report.md"
+          set +e
           php scripts/check-upstream.php > "$report"
           code=$?
+          set -e
+          if [ "$code" -gt 1 ]; then
+            cat "$report" || true
+            echo "::error::scripts/check-upstream.php exited with code $code. See the log above."
+            exit "$code"
+          fi
+          if [ "$code" -eq 1 ] && [ ! -s "$report" ]; then
+            echo "::error::scripts/check-upstream.php exited with code 1 but wrote no report."
+            exit 1
+          fi
           cat "$report"
           delimiter="EOF_$(openssl rand -hex 16)"
           {
@@ -55,13 +67,6 @@ jobs:
             cat "$report"
             echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Fail on a download or parse error
-        if: steps.check.outputs.code == '2'
-        run: |
-          set -euo pipefail
-          echo "::error::scripts/check-upstream.php could not download or parse a file. See the log of the previous step."
-          exit 1
 
   report:
     name: Open or update the issue

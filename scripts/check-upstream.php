@@ -905,22 +905,25 @@ final class UpstreamCheck
         $closeDetails = strlen("</details>\n");
         $kept = [];
         $size = 0;
-        $fence = null;
+        $fence = null; // [marker character, opening run length]
         $details = 0;
         foreach (explode("\n", $report) as $line) {
             $marker = rtrim($line, "\r");
             $nextFence = $fence;
             $nextDetails = $details;
-            if ($fence === null && preg_match('/^(`{3,})/', $marker, $m) === 1) {
-                $nextFence = $m[1];
-            } elseif ($fence !== null && preg_match('/^(`{3,})\s*$/', $marker, $m) === 1 && strlen($m[1]) >= strlen($fence)) {
+            if ($fence === null) {
+                if (preg_match('/^ {0,3}(`{3,}|~{3,})/', $marker, $m) === 1) {
+                    $nextFence = [$m[1][0], strlen($m[1])];
+                } elseif ($marker === '<details>') {
+                    $nextDetails++;
+                } elseif ($marker === '</details>') {
+                    $nextDetails = max(0, $nextDetails - 1);
+                }
+            } elseif (preg_match('/^ {0,3}(' . $fence[0] . '+)\s*$/', $marker, $m) === 1 && strlen($m[1]) >= $fence[1]) {
+                // A closing fence has the same character and a run at least as long as the opening one.
                 $nextFence = null;
-            } elseif ($fence === null && $marker === '<details>') {
-                $nextDetails++;
-            } elseif ($fence === null && $marker === '</details>') {
-                $nextDetails = max(0, $nextDetails - 1);
             }
-            $closers = ($nextFence !== null ? strlen($nextFence) + 1 : 0) + $nextDetails * $closeDetails;
+            $closers = ($nextFence !== null ? $nextFence[1] + 1 : 0) + $nextDetails * $closeDetails;
             if ($size + strlen($line) + 1 + $closers + strlen($notice) > self::MAX_REPORT_BYTES) {
                 break;
             }
@@ -931,7 +934,7 @@ final class UpstreamCheck
         }
         $out = implode("\n", $kept) . "\n";
         if ($fence !== null) {
-            $out .= $fence . "\n";
+            $out .= str_repeat($fence[0], $fence[1]) . "\n";
         }
         $out .= str_repeat("</details>\n", $details);
 

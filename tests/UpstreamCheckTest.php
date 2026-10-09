@@ -659,32 +659,49 @@ final class UpstreamCheckTest extends TestCase
         require_once dirname(__DIR__) . '/scripts/check-upstream.php';
 
         $words = ['abc', 'žluťoučký', '日本語のテキスト', "emoji \u{1F600}", str_repeat('x', 900)];
-        for ($seed = 0; $seed < 150; $seed++) {
+        for ($seed = 0; $seed < 400; $seed++) {
             mt_srand($seed);
             $eol = $seed % 2 === 0 ? "\r\n" : "\n";
             $lines = [];
             $open = 0;
-            $fence = false;
+            $fence = null;
             $size = 0;
             while ($size < 65000 + mt_rand(0, 3000)) {
-                $roll = mt_rand(0, 9);
-                if ($roll === 0 && $open < 20 && !$fence) {
-                    $line = '<details>';
-                    $open++;
-                } elseif ($roll === 1 && $open > 0 && !$fence) {
-                    $line = '</details>';
-                    $open--;
-                } elseif ($roll === 2 && !$fence) {
-                    $line = str_repeat('`', mt_rand(3, 5)) . 'diff';
-                    $fence = strlen($line) - 4;
-                } elseif ($roll === 3 && $fence !== false) {
-                    $line = str_repeat('`', $fence);
-                    $fence = false;
-                } else {
+                $roll = mt_rand(0, 11);
+                $text = static function () use ($words): string {
                     $line = '';
                     for ($w = mt_rand(1, 12); $w > 0; $w--) {
                         $line .= $words[mt_rand(0, 4)] . ' ';
                     }
+
+                    return $line;
+                };
+                if ($fence === null) {
+                    if ($roll === 0 && $open < 20) {
+                        $line = '<details>';
+                        $open++;
+                    } elseif ($roll === 1 && $open > 0) {
+                        $line = '</details>';
+                        $open--;
+                    } elseif ($roll <= 4) {
+                        $fence = [mt_rand(0, 1) === 0 ? '`' : '~', mt_rand(3, 6)];
+                        $line = str_repeat(' ', mt_rand(0, 3)) . str_repeat($fence[0], $fence[1]) . 'diff';
+                    } else {
+                        $line = $text();
+                    }
+                } elseif ($roll <= 2) {
+                    $line = str_repeat(' ', mt_rand(0, 3)) . str_repeat($fence[0], $fence[1] + mt_rand(0, 2));
+                    $fence = null;
+                } elseif ($roll === 3) {
+                    $line = '<details>';
+                } elseif ($roll === 4) {
+                    $line = '</details>';
+                } elseif ($roll === 5) {
+                    $line = str_repeat($fence[0], $fence[1] - 1) . ' short run';
+                } elseif ($roll === 6) {
+                    $line = str_repeat($fence[0] === '`' ? '~' : '`', 3 + mt_rand(0, 3));
+                } else {
+                    $line = $text();
                 }
                 $lines[] = $line;
                 $size += strlen($line) + strlen($eol);
@@ -697,10 +714,115 @@ final class UpstreamCheckTest extends TestCase
             self::assertLessThanOrEqual(60000, strlen($result), "seed {$seed}");
             self::assertSame(1, preg_match('//u', $result), "seed {$seed}");
             self::assertStringContainsString('Report truncated', $result);
-            $kept = array_map(static fn(string $l): string => rtrim($l, "\r"), explode("\n", $result));
-            self::assertSame(count(array_keys($kept, '<details>', true)), count(array_keys($kept, '</details>', true)), "seed {$seed}: details");
-            self::assertSame(0, count(array_filter($kept, static fn(string $l): bool => str_starts_with($l, '```'))) % 2, "seed {$seed}: fences");
+            [$endFence, $endDetails] = $this->markdownState($result);
+            self::assertNull($endFence, "seed {$seed}: open fence");
+            self::assertSame(0, $endDetails, "seed {$seed}: open details");
         }
+    }
+
+    /**
+     * An independent reader of the Markdown subset that the report uses.
+     *
+     * @return array{array{string, int}|null, int} Open fence (char, length) and open <details> count at the end.
+     */
+    private function markdownState(string $text): array
+    {
+        $fence = null;
+        $details = 0;
+        foreach (explode("\n", $text) as $line) {
+            $line = rtrim($line, "\r");
+            if ($fence === null) {
+                if (preg_match('/^ {0,3}(`{3,}|~{3,})/', $line, $m) === 1) {
+                    $fence = [$m[1][0], strlen($m[1])];
+                } elseif ($line === '<details>') {
+                    $details++;
+                } elseif ($line === '</details>') {
+                    $details--;
+                }
+            } elseif (preg_match('/^ {0,3}(' . ($fence[0] === '`' ? '`' : '~') . '{' . $fence[1] . ',})\s*$/', $line) === 1) {
+                $fence = null;
+            }
+        }
+
+        return [$fence, $details];
+    }
+
+    public function testTruncationClosesATildeFenceWithTheSameMarker(): void
+    {
+        require_once dirname(__DIR__) . '/scripts/check-upstream.php';
+        $report = "<details>\n~~~~diff\n" . str_repeat("line <details>\n", 8000);
+
+        $result = \UpstreamCheck::truncate($report);
+
+        self::assertLessThanOrEqual(60000, strlen($result));
+        self::assertStringContainsString("\n~~~~\n</details>\n", $result);
+        self::assertSame([null, 0], $this->markdownState($result));
+    }
+
+    /**
+     * @return array{string, string} The check step body and a runner for it.
+     */
+    private function checkStep(): array
+    {
+        $workflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/upstream-watch.yml');
+        self::assertSame(1, preg_match('/- name: Check upstream\n(?:.*\n)*?        run: \|\n((?:          .*\n|\n)+)/', $workflow, $m));
+        $body = (string) preg_replace('/^ {10}/m', '', $m[1]);
+        $script = $this->tmp . '/step.sh';
+        file_put_contents($script, $body);
+        is_dir($this->tmp . '/fakebin') || mkdir($this->tmp . '/fakebin');
+        file_put_contents($this->tmp . '/fakebin/php', "#!/bin/sh\n[ -n \"\$FAKE_REPORT\" ] && printf '%s\\n' \"\$FAKE_REPORT\"\nexit \"\$FAKE_CODE\"\n");
+        chmod($this->tmp . '/fakebin/php', 0755);
+
+        return [$script, $this->tmp . '/fakebin'];
+    }
+
+    /**
+     * @return array{int, string}
+     */
+    private function runStep(string $code, string $report, ?string $output = null): array
+    {
+        [$script, $bin] = $this->checkStep();
+        $output ??= $this->tmp . '/github-output';
+        @unlink($output);
+        $process = proc_open(['bash', $script], [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, dirname(__DIR__), [
+            'PATH' => $bin . ':' . getenv('PATH'),
+            'RUNNER_TEMP' => $this->tmp,
+            'GITHUB_OUTPUT' => $output,
+            'FAKE_CODE' => $code,
+            'FAKE_REPORT' => $report,
+        ]);
+        self::assertIsResource($process);
+        stream_get_contents($pipes[1]);
+        stream_get_contents($pipes[2]);
+
+        return [proc_close($process), is_file($output) ? (string) file_get_contents($output) : ''];
+    }
+
+    public function testTheCheckStepPassesOnlyExitCodesZeroAndOne(): void
+    {
+        [$status, $out] = $this->runStep('0', 'No functional difference.');
+        self::assertSame(0, $status);
+        self::assertStringContainsString("code=0\n", $out);
+
+        [$status, $out] = $this->runStep('1', 'Report body line');
+        self::assertSame(0, $status);
+        self::assertStringContainsString("code=1\n", $out);
+        self::assertStringContainsString('Report body line', $out);
+
+        foreach (['2', '255', '137'] as $code) {
+            [$status] = $this->runStep($code, 'x');
+            self::assertNotSame(0, $status, "A script exit code of {$code} must fail the step.");
+        }
+
+        [$status] = $this->runStep('1', '');
+        self::assertNotSame(0, $status, 'Code 1 with an empty report must fail the step.');
+    }
+
+    public function testTheCheckStepFailsWhenItCannotWriteItsOutput(): void
+    {
+        [$status] = $this->runStep('0', 'ok', $this->tmp . '/missing-dir/output');
+
+        self::assertNotSame(0, $status);
     }
 
     public function testEveryMultiLineWorkflowStepFailsFast(): void
@@ -714,7 +836,7 @@ final class UpstreamCheckTest extends TestCase
                 self::assertSame('set -euo pipefail', trim($lines[$i + 1]), 'Every run block starts with set -euo pipefail (line ' . ($i + 1) . ').');
             }
         }
-        self::assertGreaterThanOrEqual(3, $blocks);
+        self::assertGreaterThanOrEqual(2, $blocks);
         self::assertStringContainsString('Issue lookup failed', $workflow);
         self::assertMatchesRegularExpression('/if ! issues=\$\(gh issue list/', $workflow);
     }
