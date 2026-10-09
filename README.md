@@ -39,6 +39,22 @@ services:
     tags: [{ name: twig.extension }]
 ```
 
+Timber 2 (WordPress). Timber creates the Twig environment itself, so do not
+build your own. Add the extension with the
+[`timber/twig` filter](https://timber.github.io/docs/v2/guides/extending-twig/#twig-environment),
+for example in your theme's `functions.php`:
+
+```php
+add_filter( 'timber/twig', function ( \Twig\Environment $twig ) {
+    $twig->addExtension( new \Parisek\Twig\AttributeExtension() );
+
+    return $twig;
+} );
+```
+
+[`parisek/timber-kit`](https://github.com/parisek/timber-kit) already registers
+the extension in its `StarterBase`. If you use the kit, you need no extra code.
+
 ## In templates
 
 ```twig
