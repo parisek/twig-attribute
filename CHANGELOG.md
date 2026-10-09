@@ -72,8 +72,18 @@ by `drupal/core-utility ^10.0 || ^11.0` in 1.5.x — anyone who could install
 package; consumers use the `create_attribute()` Twig function, not the Drupal
 classes directly.
 
-If your project was reaching `Drupal\Component\Render\…` or
-`Drupal\Component\Utility\…` classes through this package's transitive
-install, add the relevant `drupal/core-*` package to your own
-`composer.json` `require` — see the README's "Edge cases that may need
-action" section.
+#### Upgrading from 1.5.x
+
+Most consumers need no action. Run `composer update parisek/twig-attribute`.
+Existing methods keep their signatures and render output. A direct
+`new \Drupal\Component\Attribute\AttributeCollection(...)` call in PHP keeps
+working, because the refresh adds methods and removes none.
+
+Two cases may need action:
+
+- Your code reaches `Drupal\Component\Render\…` or
+  `Drupal\Component\Utility\…` classes through this package's transitive
+  install. Add the relevant `drupal/core-*` package to your own
+  `composer.json` `require`. Relying on a transitive package is fragile.
+- You run PHP below 8.3 or Twig 2. Raise PHP and Twig in your project, or pin
+  `parisek/twig-attribute` to `1.5.*`.
