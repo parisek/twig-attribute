@@ -139,7 +139,7 @@ final class UpstreamCheck
                 $commitsMode,
                 $reviewedFile,
                 (string) $options['mark-reviewed'],
-                $options['ack'] === null ? [] : array_values(array_filter(array_map('trim', explode(',', $options['ack'])), static fn(string $a): bool => $a !== '')),
+                $options['ack'] === null ? [] : array_values(array_filter(array_map(static fn(string $a): string => strtolower(trim($a)), explode(',', $options['ack'])), static fn(string $a): bool => $a !== '')),
                 $options['reset-boundary'] !== null,
             );
         }
@@ -211,8 +211,10 @@ final class UpstreamCheck
             return 1;
         }
 
-        $acknowledged = [];
+        // Without a marker there is no boundary: read up to the page cap and gate every SA-CORE commit found.
+        // Deleting the marker must not skip the security check.
         $previous = null;
+        $gate = true;
         if (is_file($reviewedFile)) {
             try {
                 $previous = self::readReviewed($reviewedFile);
@@ -220,21 +222,39 @@ final class UpstreamCheck
                 if (!$reset) {
                     throw $e;
                 }
+                $gate = false; // An unreadable marker plus --reset-boundary: the maintainer accepts the gap.
             }
         }
-        if ($previous !== null) {
-            [$commits, $lost] = self::scan($commitsMode, $previous);
-            if ($lost !== [] && !$reset) {
-                fwrite(STDOUT, self::report([], $commits, $lost, $previous));
-                fwrite(STDERR, 'check-upstream: the review boundary is lost for ' . implode(', ', array_keys($lost)) . ". Read the recent upstream history by hand, then run again with --reset-boundary.\n");
+        $acknowledged = [];
+        if ($gate) {
+            if ($previous !== null) {
+                [$commits, $lost] = self::scan($commitsMode, $previous);
+                if ($lost !== [] && !$reset) {
+                    fwrite(STDOUT, self::report([], $commits, $lost, $previous));
+                    fwrite(STDERR, 'check-upstream: the review boundary is lost for ' . implode(', ', array_keys($lost)) . ". Read the recent upstream history by hand, then run again with --reset-boundary.\n");
 
-                return 1;
+                    return 1;
+                }
+            } else {
+                [$commits] = self::scan($commitsMode, ['commit' => '', 'date' => '', 'reviewed_by' => '', 'files' => array_fill_keys(array_keys(self::FILES), '')]);
+            }
+            $security = array_values(array_filter($commits, static fn(array $c): bool => $c['security']));
+            $unmatched = [];
+            foreach ($ack as $prefix) {
+                $hits = array_values(array_filter($security, static fn(array $c): bool => str_starts_with($c['id'], $prefix)));
+                if ($hits === []) {
+                    $unmatched[] = $prefix;
+                } elseif (count($hits) > 1) {
+                    fwrite(STDERR, "check-upstream: --ack={$prefix} is ambiguous. It matches " . count($hits) . " SA-CORE commits. Use a longer prefix.\n");
+
+                    return 1;
+                }
+            }
+            foreach ($unmatched as $prefix) {
+                fwrite(STDERR, "check-upstream: warning: --ack={$prefix} matches no SA-CORE commit since the boundary.\n");
             }
             $pending = [];
-            foreach ($commits as $commit) {
-                if (!$commit['security']) {
-                    continue;
-                }
+            foreach ($security as $commit) {
                 $matched = false;
                 foreach ($ack as $prefix) {
                     $matched = $matched || str_starts_with($commit['id'], $prefix);
@@ -284,12 +304,45 @@ final class UpstreamCheck
             $payload['boundary_reset'] = true;
         }
         $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        if ($json === false || file_put_contents($reviewedFile, $json . "\n") === false) {
-            throw new UpstreamCheckError("Cannot write {$reviewedFile}.");
+        if ($json === false) {
+            throw new UpstreamCheckError('Cannot encode the marker.');
         }
+        self::writeAtomically($reviewedFile, $json . "\n", $payload);
         fwrite(STDOUT, "Marked {$newest['id']} ({$newest['committed_date']}) as reviewed by {$who}.\n");
 
         return 0;
+    }
+
+    /**
+     * Writes the marker through a temp file in the same directory, verifies it, then renames it over the old one.
+     * A failure leaves the previous marker as it was and removes the temp file.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private static function writeAtomically(string $file, string $content, array $payload): void
+    {
+        $dir = dirname($file);
+        $temp = @tempnam($dir, '.upstream-reviewed.');
+        if ($temp === false) {
+            throw new UpstreamCheckError("Cannot create a temp file in {$dir}. The marker is unchanged.");
+        }
+        try {
+            if (@file_put_contents($temp, $content) !== strlen($content)) {
+                throw new UpstreamCheckError("Cannot write {$temp}. The marker is unchanged.");
+            }
+            $back = json_decode((string) @file_get_contents($temp), true);
+            if ($back !== json_decode((string) json_encode($payload), true)) {
+                throw new UpstreamCheckError('The temp file does not match the marker. The marker is unchanged.');
+            }
+            $mode = is_file($file) ? (fileperms($file) & 0777) : 0644;
+            if (!@chmod($temp, $mode) || !@rename($temp, $file)) {
+                throw new UpstreamCheckError("Cannot replace {$file}. The marker is unchanged.");
+            }
+        } catch (UpstreamCheckError $e) {
+            @unlink($temp);
+
+            throw $e;
+        }
     }
 
     // ---------------------------------------------------------------- comparison
@@ -843,36 +896,44 @@ final class UpstreamCheck
 
     /**
      * Cuts at a line boundary, closes any open code fence and <details>, and adds a visible notice.
+     * A line is kept only if the text up to it, plus the closers that its open state needs, plus the notice, fits.
+     * Line ends may be LF or CRLF.
      */
-    private static function truncate(string $report): string
+    public static function truncate(string $report): string
     {
         $notice = "\n> **Report truncated.** Run `php scripts/check-upstream.php` to see all of it.\n";
-        $budget = self::MAX_REPORT_BYTES - strlen($notice) - 40;
+        $closeDetails = strlen("</details>\n");
         $kept = [];
         $size = 0;
         $fence = null;
         $details = 0;
         foreach (explode("\n", $report) as $line) {
-            if ($size + strlen($line) + 1 > $budget) {
+            $marker = rtrim($line, "\r");
+            $nextFence = $fence;
+            $nextDetails = $details;
+            if ($fence === null && preg_match('/^(`{3,})/', $marker, $m) === 1) {
+                $nextFence = $m[1];
+            } elseif ($fence !== null && preg_match('/^(`{3,})\s*$/', $marker, $m) === 1 && strlen($m[1]) >= strlen($fence)) {
+                $nextFence = null;
+            } elseif ($fence === null && $marker === '<details>') {
+                $nextDetails++;
+            } elseif ($fence === null && $marker === '</details>') {
+                $nextDetails = max(0, $nextDetails - 1);
+            }
+            $closers = ($nextFence !== null ? strlen($nextFence) + 1 : 0) + $nextDetails * $closeDetails;
+            if ($size + strlen($line) + 1 + $closers + strlen($notice) > self::MAX_REPORT_BYTES) {
                 break;
             }
             $size += strlen($line) + 1;
             $kept[] = $line;
-            if ($fence === null && preg_match('/^(`{3,})/', $line, $m) === 1) {
-                $fence = $m[1];
-            } elseif ($fence !== null && preg_match('/^(`{3,})\s*$/', $line, $m) === 1 && strlen($m[1]) >= strlen($fence)) {
-                $fence = null;
-            } elseif ($fence === null && $line === '<details>') {
-                $details++;
-            } elseif ($fence === null && $line === '</details>') {
-                $details--;
-            }
+            $fence = $nextFence;
+            $details = $nextDetails;
         }
         $out = implode("\n", $kept) . "\n";
         if ($fence !== null) {
             $out .= $fence . "\n";
         }
-        $out .= str_repeat("</details>\n", max(0, $details));
+        $out .= str_repeat("</details>\n", $details);
 
         return $out . $notice;
     }

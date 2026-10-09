@@ -261,7 +261,7 @@ final class UpstreamCheckTest extends TestCase
         ]);
         $file = $this->tmp . '/reviewed.json';
 
-        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=Test Person'], true);
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=Test Person', '--ack=' . str_repeat('c', 12)], true);
 
         self::assertSame(0, $code, $out);
         $data = json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
@@ -561,5 +561,161 @@ final class UpstreamCheckTest extends TestCase
         self::assertStringNotContainsString('--reset-boundary', $workflow);
         self::assertStringContainsString('--app github-actions', $workflow);
         self::assertStringContainsString('--arg title', $workflow);
+    }
+
+    public function testMarkReviewedWithoutAMarkerStillNeedsTheSecurityAck(): void
+    {
+        $dir = $this->commits([$this->commit('c', 'SA-CORE-2099-004 Fix'), $this->commit('b')]);
+        $file = $this->tmp . '/new-marker.json';
+
+        [$code, , $err] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T'], true);
+        self::assertSame(1, $code);
+        self::assertStringContainsString('SA-CORE', $err);
+        self::assertFileDoesNotExist($file, 'Deleting the marker must not bypass the check.');
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T', '--ack=' . strtoupper(str_repeat('c', 12))], true);
+        self::assertSame(0, $code, $out);
+        self::assertFileExists($file);
+    }
+
+    public function testFirstBaselineOnACleanTreeNeedsNoAck(): void
+    {
+        $dir = $this->commits([$this->commit('b'), $this->commit('a')]);
+        $file = $this->tmp . '/new-marker.json';
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T'], true);
+
+        self::assertSame(0, $code, $out);
+        self::assertFileExists($file);
+    }
+
+    public function testAnAckThatMatchesNothingIsWarnedAbout(): void
+    {
+        $dir = $this->commits([$this->commit('b'), $this->commit('a')]);
+
+        [$code, , $err] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40)), '--mark-reviewed=T', '--ack=' . str_repeat('e', 12)], true);
+
+        self::assertSame(0, $code);
+        self::assertStringContainsString('matches no SA-CORE commit', $err);
+    }
+
+    public function testAnAmbiguousAckIsRefused(): void
+    {
+        $one = 'abcdef012345' . str_repeat('1', 28);
+        $two = 'abcdef012345' . str_repeat('2', 28);
+        $dir = $this->commits([
+            ['id' => $one, 'title' => 'SA-CORE-2099-005 One', 'date' => '2099-01-02T00:00:00.000+00:00'],
+            ['id' => $two, 'title' => 'SA-CORE-2099-006 Two', 'date' => '2099-01-01T00:00:00.000+00:00'],
+            $this->commit('a'),
+        ]);
+        $file = $this->reviewed(str_repeat('a', 40));
+        $before = (string) file_get_contents($file);
+
+        [$code, , $err] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T', '--ack=abcdef012345'], true);
+
+        self::assertSame(1, $code);
+        self::assertStringContainsString('ambiguous', $err);
+        self::assertSame($before, (string) file_get_contents($file));
+    }
+
+    public function testAFailingWriteLeavesThePreviousMarkerIntact(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Root ignores directory permissions.');
+        }
+        $dir = $this->commits([$this->commit('b'), $this->commit('a')]);
+        mkdir($this->tmp . '/locked');
+        $file = $this->tmp . '/locked/reviewed.json';
+        copy($this->reviewed(str_repeat('a', 40)), $file);
+        $before = (string) file_get_contents($file);
+        chmod($this->tmp . '/locked', 0555);
+        try {
+            [$code, , $err] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T'], true);
+        } finally {
+            chmod($this->tmp . '/locked', 0755);
+        }
+
+        self::assertSame(2, $code);
+        self::assertNotSame('', $err);
+        self::assertSame($before, (string) file_get_contents($file));
+        self::assertSame(['reviewed.json'], array_values(array_diff(scandir($this->tmp . '/locked') ?: [], ['.', '..'])), 'No temp file may stay behind.');
+    }
+
+    public function testNoTempFileStaysAfterASuccessfulWrite(): void
+    {
+        $dir = $this->commits([$this->commit('b'), $this->commit('a')]);
+        mkdir($this->tmp . '/out');
+        $file = $this->tmp . '/out/reviewed.json';
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T'], true);
+
+        self::assertSame(0, $code, $out);
+        self::assertSame(['reviewed.json'], array_values(array_diff(scandir($this->tmp . '/out') ?: [], ['.', '..'])));
+        self::assertSame(0644, fileperms($file) & 0777);
+    }
+
+    public function testTruncationHoldsTheLimitForRandomDocuments(): void
+    {
+        require_once dirname(__DIR__) . '/scripts/check-upstream.php';
+
+        $words = ['abc', 'žluťoučký', '日本語のテキスト', "emoji \u{1F600}", str_repeat('x', 900)];
+        for ($seed = 0; $seed < 150; $seed++) {
+            mt_srand($seed);
+            $eol = $seed % 2 === 0 ? "\r\n" : "\n";
+            $lines = [];
+            $open = 0;
+            $fence = false;
+            $size = 0;
+            while ($size < 65000 + mt_rand(0, 3000)) {
+                $roll = mt_rand(0, 9);
+                if ($roll === 0 && $open < 20 && !$fence) {
+                    $line = '<details>';
+                    $open++;
+                } elseif ($roll === 1 && $open > 0 && !$fence) {
+                    $line = '</details>';
+                    $open--;
+                } elseif ($roll === 2 && !$fence) {
+                    $line = str_repeat('`', mt_rand(3, 5)) . 'diff';
+                    $fence = strlen($line) - 4;
+                } elseif ($roll === 3 && $fence !== false) {
+                    $line = str_repeat('`', $fence);
+                    $fence = false;
+                } else {
+                    $line = '';
+                    for ($w = mt_rand(1, 12); $w > 0; $w--) {
+                        $line .= $words[mt_rand(0, 4)] . ' ';
+                    }
+                }
+                $lines[] = $line;
+                $size += strlen($line) + strlen($eol);
+            }
+            $report = implode($eol, $lines) . $eol;
+            self::assertGreaterThan(60000, strlen($report));
+
+            $result = \UpstreamCheck::truncate($report);
+
+            self::assertLessThanOrEqual(60000, strlen($result), "seed {$seed}");
+            self::assertSame(1, preg_match('//u', $result), "seed {$seed}");
+            self::assertStringContainsString('Report truncated', $result);
+            $kept = array_map(static fn(string $l): string => rtrim($l, "\r"), explode("\n", $result));
+            self::assertSame(count(array_keys($kept, '<details>', true)), count(array_keys($kept, '</details>', true)), "seed {$seed}: details");
+            self::assertSame(0, count(array_filter($kept, static fn(string $l): bool => str_starts_with($l, '```'))) % 2, "seed {$seed}: fences");
+        }
+    }
+
+    public function testEveryMultiLineWorkflowStepFailsFast(): void
+    {
+        $workflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/upstream-watch.yml');
+        $lines = explode("\n", $workflow);
+        $blocks = 0;
+        foreach ($lines as $i => $line) {
+            if (preg_match('/^\s+run: \|\s*$/', $line) === 1) {
+                $blocks++;
+                self::assertSame('set -euo pipefail', trim($lines[$i + 1]), 'Every run block starts with set -euo pipefail (line ' . ($i + 1) . ').');
+            }
+        }
+        self::assertGreaterThanOrEqual(3, $blocks);
+        self::assertStringContainsString('Issue lookup failed', $workflow);
+        self::assertMatchesRegularExpression('/if ! issues=\$\(gh issue list/', $workflow);
     }
 }

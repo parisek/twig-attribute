@@ -42,6 +42,7 @@ jobs:
         # The script exits 0 (no drift), 1 (drift or SA-CORE commit) or 2 (error).
         # The step records the code and the report, then the last step fails on 2.
         run: |
+          set -euo pipefail
           set +e
           report="$RUNNER_TEMP/upstream-report.md"
           php scripts/check-upstream.php > "$report"
@@ -58,6 +59,7 @@ jobs:
       - name: Fail on a download or parse error
         if: steps.check.outputs.code == '2'
         run: |
+          set -euo pipefail
           echo "::error::scripts/check-upstream.php could not download or parse a file. See the log of the previous step."
           exit 1
 
@@ -77,13 +79,18 @@ jobs:
     steps:
       - name: Open or update the issue
         run: |
+          set -euo pipefail
           report="$RUNNER_TEMP/upstream-report.md"
           printf '%s\n' "$REPORT_BODY" > "$report"
           # Only issues that the github-actions app created, so an issue with the same
-          # title by someone else is never overwritten. The title goes to jq as an argument.
-          number=$(gh issue list --state open --label dependencies --limit 200 \
-            --app github-actions --json number,title \
-            | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')
+          # title by someone else is never overwritten. A failed lookup must stop the job:
+          # an empty answer would look like "no issue yet" and create a duplicate.
+          if ! issues=$(gh issue list --state open --label dependencies --limit 200 \
+            --app github-actions --json number,title); then
+            echo "::error::Issue lookup failed. No issue was created or changed."
+            exit 1
+          fi
+          number=$(printf '%s' "$issues" | jq -r --arg title "$ISSUE_TITLE" '[.[] | select(.title == $title)][0].number // empty')
           if [ -n "$number" ]; then
             gh issue edit "$number" --body-file "$report"
           else
