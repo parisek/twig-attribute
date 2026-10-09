@@ -914,9 +914,9 @@ final class UpstreamCheck
             if ($fence === null) {
                 if (preg_match('/^ {0,3}(`{3,}|~{3,})/', $marker, $m) === 1) {
                     $nextFence = [$m[1][0], strlen($m[1])];
-                } elseif ($marker === '<details>') {
+                } elseif (preg_match('/^\s{0,3}<details(\s[^>]*)?>\s*$/i', $marker) === 1) {
                     $nextDetails++;
-                } elseif ($marker === '</details>') {
+                } elseif (preg_match('/^\s{0,3}<\/details>\s*$/i', $marker) === 1) {
                     $nextDetails = max(0, $nextDetails - 1);
                 }
             } elseif (preg_match('/^ {0,3}(' . $fence[0] . '+)\s*$/', $marker, $m) === 1 && strlen($m[1]) >= $fence[1]) {

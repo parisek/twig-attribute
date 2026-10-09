@@ -678,10 +678,10 @@ final class UpstreamCheckTest extends TestCase
                 };
                 if ($fence === null) {
                     if ($roll === 0 && $open < 20) {
-                        $line = '<details>';
+                        $line = str_repeat(' ', mt_rand(0, 3)) . ['<details>', '<details open>', '<details class="x">', '<DETAILS>', '<Details  open="">'][mt_rand(0, 4)];
                         $open++;
                     } elseif ($roll === 1 && $open > 0) {
-                        $line = '</details>';
+                        $line = str_repeat(' ', mt_rand(0, 3)) . ['</details>', '</DETAILS>'][mt_rand(0, 1)];
                         $open--;
                     } elseif ($roll <= 4) {
                         $fence = [mt_rand(0, 1) === 0 ? '`' : '~', mt_rand(3, 6)];
@@ -693,9 +693,9 @@ final class UpstreamCheckTest extends TestCase
                     $line = str_repeat(' ', mt_rand(0, 3)) . str_repeat($fence[0], $fence[1] + mt_rand(0, 2));
                     $fence = null;
                 } elseif ($roll === 3) {
-                    $line = '<details>';
+                    $line = ['<details>', '<details open>', '<DETAILS>'][mt_rand(0, 2)];
                 } elseif ($roll === 4) {
-                    $line = '</details>';
+                    $line = ['</details>', '</DETAILS>'][mt_rand(0, 1)];
                 } elseif ($roll === 5) {
                     $line = str_repeat($fence[0], $fence[1] - 1) . ' short run';
                 } elseif ($roll === 6) {
@@ -734,10 +734,10 @@ final class UpstreamCheckTest extends TestCase
             if ($fence === null) {
                 if (preg_match('/^ {0,3}(`{3,}|~{3,})/', $line, $m) === 1) {
                     $fence = [$m[1][0], strlen($m[1])];
-                } elseif ($line === '<details>') {
+                } elseif (preg_match('/^\s{0,3}<details(\s[^>]*)?>\s*$/i', $line) === 1) {
                     $details++;
-                } elseif ($line === '</details>') {
-                    $details--;
+                } elseif (preg_match('/^\s{0,3}<\/details>\s*$/i', $line) === 1) {
+                    $details = max(0, $details - 1);
                 }
             } elseif (preg_match('/^ {0,3}(' . ($fence[0] === '`' ? '`' : '~') . '{' . $fence[1] . ',})\s*$/', $line) === 1) {
                 $fence = null;
@@ -756,6 +756,29 @@ final class UpstreamCheckTest extends TestCase
 
         self::assertLessThanOrEqual(60000, strlen($result));
         self::assertStringContainsString("\n~~~~\n</details>\n", $result);
+        self::assertSame([null, 0], $this->markdownState($result));
+    }
+
+    public function testTruncationRecognisesDetailsTagsWithAttributesAndCase(): void
+    {
+        require_once dirname(__DIR__) . '/scripts/check-upstream.php';
+
+        foreach (['<details open>', '<details class="x">', '<DETAILS>', '  <Details  open="">'] as $opener) {
+            $result = \UpstreamCheck::truncate($opener . "\r\n" . str_repeat("filler line\r\n", 8000));
+
+            self::assertLessThanOrEqual(60000, strlen($result), $opener);
+            self::assertStringContainsString("</details>\n\n> **Report truncated", $result, $opener);
+            self::assertSame([null, 0], $this->markdownState($result), $opener);
+        }
+    }
+
+    public function testAStrayDetailsCloserNeverMakesTheOpenCountNegative(): void
+    {
+        require_once dirname(__DIR__) . '/scripts/check-upstream.php';
+
+        $result = \UpstreamCheck::truncate("</DETAILS>\n</details>\n<details open>\n" . str_repeat("filler line\n", 8000));
+
+        self::assertSame(3, substr_count(strtolower($result), '</details>'), 'Two stray closers stay, one closer is added.');
         self::assertSame([null, 0], $this->markdownState($result));
     }
 
