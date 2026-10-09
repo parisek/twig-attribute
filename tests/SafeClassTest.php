@@ -264,17 +264,21 @@ TWIG;
         );
     }
 
-    public function testAttributeNameIsNotSanitised(): void
+    public function testUnsafeAttributeNameIsRejected(): void
     {
-        // Trust contract, as in Drupal: names are developer input. A name
-        // with whitespace and an equals sign injects a second attribute
-        // (the quotes are escaped, the space is not).
-        $output = $this->render(
-            '{% set a = create_attribute() %}{{ a.setAttribute(n, "v") }}',
-            ['n' => 'a="1" onclick'],
-        );
-
-        self::assertStringContainsString(' onclick="v"', $output);
+        // A name with whitespace and an equals sign would inject a second
+        // attribute (the quotes are escaped, the space is not). The guard in
+        // AttributeValueBase refuses it (issue #32, option B). Twig wraps the
+        // exception, so the original is the previous one.
+        try {
+            $this->render(
+                '{% set a = create_attribute() %}{{ a.setAttribute(n, "v") }}',
+                ['n' => 'a="1" onclick'],
+            );
+            self::fail('Expected a rendering error.');
+        } catch (\Twig\Error\RuntimeError $e) {
+            self::assertInstanceOf(\InvalidArgumentException::class, $e->getPrevious());
+        }
     }
 
     public function testOneExtensionInstanceInTwoEnvironments(): void

@@ -130,10 +130,14 @@ What to know:
   fails closed: the output is over-escaped, never raw.
 - A class that implements `MarkupInterface` is declared trusted HTML. Twig prints
   its whole `__toString()` output raw.
-- Attribute names and custom `AttributeValueBase` subclasses are trusted developer
-  input, as in Drupal. Never build a name from user input. A name with whitespace,
-  `=` or a NUL byte injects attributes. A value subclass that returns markup injects
-  markup. Attribute values are escaped.
+- Attribute names are checked. A name that is empty or contains ASCII whitespace,
+  a control character (NUL included) or any of `"` `'` `<` `>` `/` `=` throws an
+  `\InvalidArgumentException`. Names such as `@click`, `:class`, `x-on:click.prevent`,
+  `[hidden]`, `(click)`, `*ngIf` and `#ref` stay valid. Drupal does not check names;
+  this is a deliberate difference.
+- Custom `AttributeValueBase` subclasses are trusted developer input, as in Drupal.
+  A value subclass that returns markup injects markup. Attribute values from the
+  built-in classes are escaped.
 - Register on the environment you render with. Do not clone an environment (cloning
   is deprecated in Twig 3.30 and not allowed in Twig 4).
 

@@ -66,6 +66,8 @@ final class UpstreamCheck
      */
     public const LINE_MAP = [
         'public function offsetSet($name, $value): void {' => 'public function offsetSet($name, mixed $value): void {',
+        // Deliberate deviation: reject unsafe attribute names (issue #32, option B).
+        '$this->name = $name;' => '$this->name = \\Parisek\\Twig\\Internal\\AttributeName::assertValid($name);',
     ];
 
     /** Attributes that the port removes on purpose. */
