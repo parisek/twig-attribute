@@ -7,12 +7,12 @@
 [![Twig](https://img.shields.io/badge/Twig-%5E3.27-blue)](https://twig.symfony.com/)
 
 A Twig 3 extension that gives templates a `create_attribute()` function for
-collecting, sanitizing, and rendering HTML attributes — backed by a vendored,
-maintained port of Drupal's `Attribute` class.
+collecting, sanitizing, and rendering HTML attributes. It is backed by a vendored
+port of Drupal's `Attribute` class.
 
-The package ships its own port (under `Drupal\Component\Attribute`) rather than
-depending on Drupal core. The vendored sources are refreshed from Drupal 11.x
-on each release; the API matches what Drupal templates expect.
+The package ships its own port (under `Drupal\Component\Attribute`) and does not
+depend on Drupal core. The maintainer refreshes the vendored sources from
+Drupal 11.x when upstream changes. The API matches what Drupal templates expect.
 
 ## Installation
 
@@ -20,7 +20,7 @@ on each release; the API matches what Drupal templates expect.
 composer require parisek/twig-attribute
 ```
 
-Requires PHP ^8.3 and Twig ^3.0. No Drupal dependencies.
+Requires PHP ^8.3 and Twig ^3.27. No Drupal dependencies.
 
 ## Usage
 
@@ -69,8 +69,12 @@ the extension in its `StarterBase`. If you use the kit, you need no extra code.
 </div>
 ```
 
-Under Twig autoescape, call `AttributeExtension::registerSafeClass($twig)` once,
-or the attributes print as `&quot;` text. See [Autoescape](#autoescape).
+`create_attribute()` and `without` register the safe class by themselves. Under
+Twig autoescape, call `AttributeExtension::registerSafeClass($twig)` once after
+`addExtension()` as well. Without it, a collection that prints before the first
+such call prints as `&quot;` text. A subclass of `AttributeCollection`, or
+another `MarkupInterface` class, that Twig already escaped stays escaped. See
+[Autoescape](#autoescape).
 
 ```twig
 <div{{ create_attribute({'class': ['region', 'region--header']}) }}>
@@ -110,7 +114,8 @@ The call is safe to repeat. Call it before anything is rendered. It tells the Tw
 the package's `MarkupInterface` are HTML. Strings, other `Stringable` values and
 arrays stay escaped.
 
-Timber and `parisek/timber-kit` turn autoescape off and need nothing.
+Timber 2 turns autoescape off by default. A Timber theme, including one that uses
+`parisek/timber-kit`, needs nothing.
 
 What to know:
 
@@ -135,74 +140,25 @@ What to know:
 The full API (class methods, escape semantics, `without` filter behavior) mirrors
 [Drupal's Attribute class](https://api.drupal.org/api/drupal/core%21lib%21Drupal%21Core%21Template%21Attribute.php/class/Attribute/11.x).
 
-## Upgrading from 1.5.x to 1.6.0
-
-**Action required: none for the vast majority of consumers.** Run
-`composer update parisek/twig-attribute`.
-
-What changes under the hood:
-
-- The vendored `Drupal\Component\Attribute\*` classes are refreshed from
-  Drupal 11.x core. Existing methods (`addClass`, `setAttribute`,
-  `removeAttribute`, `hasClass`, `merge`, `toArray`, `__toString`,
-  iterator support) keep their signatures and render output.
-- New methods become available — your existing templates ignore them
-  unless you opt in:
-  - `hasAttribute(string $name): bool` — check existence without throwing.
-  - `removeClass(...$classes): static` — symmetric counterpart of `addClass`.
-  - `getClass(): AttributeArray` — read the class collection.
-  - `jsonSerialize(): string` — JSON encoding support (returns the rendered attribute string).
-  - `__clone()` — deep-clone correctness.
-- The package now ships its own test suite (`tests/AttributeTest.php`,
-  18 methods, pure PHPUnit). Run `vendor/bin/phpunit` to verify the
-  install if you want extra confidence.
-- Composer constraints tightened to **Twig 3+ and PHP ^8.3**. Both
-  were already required transitively by `drupal/core-utility ^10.0 || ^11.0`
-  in 1.5.x, so this change doesn't shrink the real install matrix.
-- Both `drupal/core-render` and `drupal/core-utility` are **no longer
-  required** by this package. `Html::escape()` is inlined as a 5-LOC
-  private helper. `NestedArray::mergeDeep` and `PlainTextOutput::renderFromHtml`
-  are inlined as minimal `Parisek\Twig\Internal\*` shims.
-
-### Edge cases that may need action
-
-- **You were reaching `Drupal\Component\Render\…` or
-  `Drupal\Component\Utility\…` classes through this package's transitive
-  install.** Unusual, but possible if you wrote framework-level code
-  on top of the Attribute classes. Fix: add the relevant `drupal/core-*`
-  package to your own `composer.json` `require`. This is the correct
-  long-term shape regardless — relying on transitive availability is
-  fragile.
-- **You're on PHP < 8.3 or Twig 2.** You couldn't actually install 1.5.x
-  cleanly against modern Drupal 10/11 either, so this is more about
-  cleaning up your constraints. Bump PHP/Twig in your own project, or
-  pin `parisek/twig-attribute` to `1.5.*` to stay on the previous floor.
-
-### Direct PHP usage
-
-If your code does `new \Drupal\Component\Attribute\AttributeCollection(...)`
-in PHP (instead of using `create_attribute()` from Twig), the refresh
-adds methods but doesn't remove any. Your existing calls keep working
-in 1.6.0.
-
 ## Development
 
 ```bash
 composer install
-vendor/bin/phpunit              # 41 tests
-vendor/bin/phpstan analyse      # level 5
+composer test      # PHPUnit
+composer phpstan   # static analysis
+composer cs        # code style check
 ```
 
-Source-of-truth for the vendored Drupal port is Drupal 11.x core at
+The vendored Drupal port comes from Drupal 11.x core at
 `git.drupalcode.org/project/drupal/-/tree/11.x/core/lib/Drupal/Core/Template`.
-When the upstream changes meaningfully, copy the relevant files into
-`.upstream/` (gitignored scratch dir) and re-port. See `docs/refresh-decisions.md`
-for the rationale behind the inline shims that let this package drop
-`drupal/core-render` and `drupal/core-utility`.
+When upstream changes, copy the relevant files into `.upstream/` (a gitignored
+scratch directory) and port them again. [AGENTS.md](AGENTS.md) describes the
+refresh steps and the inline shims that let the package drop `drupal/core-render`
+and `drupal/core-utility`.
 
 ## Use cases
 
-- [Drupal — Pattern Lab](https://patternlab.io/)
-- [WordPress — Timber](https://wordpress.org/plugins/timber-library/)
-- [Pimcore — Templates](https://pimcore.com/en)
-- [parisek/styleguide](https://github.com/parisek/styleguide) — the package that drove the 1.6.0 refresh.
+- [Drupal - Pattern Lab](https://patternlab.io/)
+- [WordPress - Timber](https://wordpress.org/plugins/timber-library/)
+- [Pimcore - Templates](https://pimcore.com/en)
+- [parisek/styleguide](https://github.com/parisek/styleguide) - uses this package.
