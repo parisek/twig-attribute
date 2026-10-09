@@ -7,6 +7,11 @@
         "attribute"
     ],
     "homepage": "https://github.com/parisek/twig-attribute",
+    "support": {
+        "issues": "https://github.com/parisek/twig-attribute/issues",
+        "source": "https://github.com/parisek/twig-attribute",
+        "security": "https://github.com/parisek/twig-attribute/blob/main/SECURITY.md"
+    },
     "require": {
         "php": "^8.3",
         "twig/twig": "^3.27"

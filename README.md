@@ -1,5 +1,11 @@
 # parisek/twig-attribute
 
+[![Packagist Version](https://img.shields.io/packagist/v/parisek/twig-attribute)](https://packagist.org/packages/parisek/twig-attribute)
+[![PHP Version](https://img.shields.io/packagist/php-v/parisek/twig-attribute)](https://packagist.org/packages/parisek/twig-attribute)
+[![Tests](https://img.shields.io/github/actions/workflow/status/parisek/twig-attribute/tests.yml?branch=main&label=tests)](https://github.com/parisek/twig-attribute/actions/workflows/tests.yml)
+[![License](https://img.shields.io/packagist/l/parisek/twig-attribute)](LICENSE.txt)
+[![Twig](https://img.shields.io/badge/Twig-%5E3.27-blue)](https://twig.symfony.com/)
+
 A Twig 3 extension that gives templates a `create_attribute()` function for
 collecting, sanitizing, and rendering HTML attributes — backed by a vendored,
 maintained port of Drupal's `Attribute` class.
