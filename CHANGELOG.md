@@ -59,11 +59,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `twig/twig ^2.4` support dropped. Twig 3+ only.
 
 ### Semver rationale
-Shipped as **1.6.0** rather than 2.0.0. The new constraints (`php: ^8.3`,
-`twig/twig: ^3.0`) match `drupal/core-utility ^11.0`, and the package is
-consumed through the `create_attribute()` Twig function, not through the
-Drupal classes directly. 1.5.0 declared no PHP constraint and allowed Twig 2,
-so the install matrix did shrink. See "Upgrading from 1.5.x" below.
+Shipped as **1.6.0** rather than 2.0.0. The package is consumed through the
+`create_attribute()` Twig function, not through the Drupal classes directly.
+1.5.0 declared no PHP constraint and allowed Twig 2, so the install matrix did
+shrink. See "Upgrading from 1.5.x" below.
 
 #### Upgrading from 1.5.x
 
@@ -82,9 +81,10 @@ Render output is the same. These changes can break code that goes beyond
   `removeAttribute()` and `removeClass()` now declare `...$args` instead of
   reading `func_get_args()`. A subclass that overrides these methods needs
   matching signatures. The vendored files now use `declare(strict_types=1)`.
-- `offsetSet()` converts any `\Stringable` value to plain text with
-  `PlainTextOutput::renderFromHtml()`. In 1.5.0 only `MarkupInterface`
-  objects took this path.
+- `offsetSet()` now also accepts an object that implements `\Stringable` but
+  not `MarkupInterface`, for an attribute other than `class`. It stores the
+  object as plain text, as it did for `MarkupInterface` objects. In 1.5.0 the
+  object was not converted.
 - `drupal/core-render` and `drupal/core-utility` are no longer required. If your
   code uses `Drupal\Component\Render\...` or `Drupal\Component\Utility\...`
   classes through this package, require the relevant `drupal/core-*` package

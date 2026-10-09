@@ -72,7 +72,8 @@ the extension in its `StarterBase`. If you use the kit, you need no extra code.
 `create_attribute()` and `without` register the safe class by themselves. Under
 Twig autoescape, call `AttributeExtension::registerSafeClass($twig)` once after
 `addExtension()` as well. Without it, a collection that prints before the first
-such call, or that Twig already escaped, prints as `&quot;` text. See
+such call prints as `&quot;` text. A subclass of `AttributeCollection`, or
+another `MarkupInterface` class, that Twig already escaped stays escaped. See
 [Autoescape](#autoescape).
 
 ```twig
