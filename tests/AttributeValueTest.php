@@ -83,14 +83,15 @@ final class AttributeValueTest extends TestCase
 
     public function testRenderEscapesTheName(): void
     {
-        // The name is HTML-escaped but not validated. That is the current contract.
-        self::assertSame('a&quot;b&lt;c="x"', (new AttributeString('a"b<c', 'x'))->render());
-        self::assertSame('a&quot;b&lt;c="x"', (new AttributeArray('a"b<c', ['x']))->render());
+        // The guard (issue #32) rejects quotes and angle brackets. An ampersand is
+        // still a valid name character, and it is escaped on output.
+        self::assertSame('a&amp;b="x"', (new AttributeString('a&b', 'x'))->render());
+        self::assertSame('a&amp;b="x"', (new AttributeArray('a&b', ['x']))->render());
     }
 
     public function testNameIsNotPartOfTheStringCast(): void
     {
-        self::assertSame('x', (string) new AttributeString('a"b', 'x'));
+        self::assertSame('x', (string) new AttributeString('a&b', 'x'));
     }
 
     public function testRenderOfNullValueIsNull(): void
@@ -147,7 +148,7 @@ final class AttributeValueTest extends TestCase
 
     public function testBooleanEscapesTheName(): void
     {
-        self::assertSame('a&quot;b&lt;c&gt;&amp;', (new AttributeBoolean('a"b<c>&', true))->render());
+        self::assertSame('a&amp;b', (new AttributeBoolean('a&b', true))->render());
     }
 
     public function testBooleanValueIsRawNotEscaped(): void

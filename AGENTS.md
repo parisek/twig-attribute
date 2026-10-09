@@ -82,6 +82,13 @@ The package's whole reason to drop `drupal/core-*` is to terminate every dep cha
 
 If a refresh would require a fifth shim or a shim exceeding ~30 LOC, stop and reconsider — the prune-both-drupal-deps strategy assumes shims stay minimal.
 
+## Deliberate deviations from Drupal
+
+Keep this list short. Each item needs a rule in `LINE_MAP`/`USE_MAP` in `scripts/check-upstream.php`, or the watch reports it as drift.
+
+- **Attribute names are validated** (issue #32, option B). `AttributeValueBase::__construct()` calls `Internal\AttributeName::assertValid()`; Drupal stores the name unchecked. It throws `\InvalidArgumentException` for an empty name, ASCII whitespace, control characters (NUL included) and `" ' < > / =`. `@ : . [ ] ( ) * #` stay valid. Do not widen the rule without a test for the framework names in `tests/AttributeNameTest.php`.
+- **Custom `AttributeValueBase` subclasses stay trusted** (issue #32, option A). `render()` prints their `__toString()` output as it is. The README says so.
+
 ## PHPStan level
 
 Level 8. PHPStan analyses `src/Twig/`, `src/Internal/` and `scripts/` only. It scans `src/` for types but does not analyse it: the vendored Drupal sources keep their upstream docblocks, so analysing them would report untyped `array` parameters that a refresh from upstream would bring back.
