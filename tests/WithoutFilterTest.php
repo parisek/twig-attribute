@@ -26,10 +26,10 @@ final class WithoutFilterTest extends TestCase
      */
     private function render(string $template, array $context = [], string|false $autoescape = false): string
     {
-        $twig = new Environment(new ArrayLoader(['t.twig' => $template]), ['autoescape' => $autoescape]);
+        $twig = new Environment(new ArrayLoader([(false === $autoescape ? 't-off' : 't') . '.twig' => $template]), ['autoescape' => $autoescape]);
         $twig->addExtension(new AttributeExtension());
 
-        return $twig->render('t.twig', $context);
+        return $twig->render((false === $autoescape ? 't-off' : 't') . '.twig', $context);
     }
 
     public function testFilterIsRegistered(): void
@@ -230,13 +230,11 @@ final class WithoutFilterTest extends TestCase
         );
     }
 
-    public function testCollectionIsEscapedLikeThePlainVariableWhenAutoescapeIsOn(): void
+    public function testCollectionIsSafeWhenAutoescapeIsOn(): void
     {
-        $context = ['attributes' => $this->attributes()];
-
         self::assertSame(
-            $this->render('{{ attributes }}', $context, 'html'),
-            $this->render('{{ attributes|without }}', $context, 'html'),
+            ' id="socks" data-x="y"',
+            $this->render('{{ attributes|without("class") }}', ['attributes' => $this->attributes()], 'html'),
         );
     }
 }

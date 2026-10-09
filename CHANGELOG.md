@@ -10,6 +10,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `without` Twig filter, with the semantics of Drupal core's `TwigExtension::withoutFilter()`. `{{ attributes|without('class') }}` renders a copy of the collection (or a plain array) without the named keys and leaves the original unchanged. The README and the `AttributeCollection` docblock already described this filter, but the package did not register it.
 
+### Fixed
+
+- An attribute collection kept in a variable, for example `{% set a = create_attribute() %}<div{{ a.addClass("x") }}>`, was escaped a second time under Twig autoescape. New `AttributeExtension::registerSafeClass($twig)` declares `MarkupInterface` objects as HTML in the Twig escaper. Call it right after `addExtension()`, before anything is rendered, when autoescape is on. Objects that Twig already escaped in that environment keep being escaped, including subclasses of `AttributeCollection`. Strings, other `Stringable` values and arrays stay escaped. As a fallback the extension calls it on the first `create_attribute()` or `without` call; that fallback depends on the order of calls. Timber and `timber-kit` (autoescape off) need nothing. A `MarkupInterface` class is trusted HTML; attribute names and custom `AttributeValueBase` subclasses stay trusted developer input, as in Drupal.
+
 ## [1.6.1] - 2026-06-01
 
 ### Security

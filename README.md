@@ -69,6 +69,9 @@ the extension in its `StarterBase`. If you use the kit, you need no extra code.
 </div>
 ```
 
+Under Twig autoescape, call `AttributeExtension::registerSafeClass($twig)` once,
+or the attributes print as `&quot;` text. See [Autoescape](#autoescape).
+
 ```twig
 <div{{ create_attribute({'class': ['region', 'region--header']}) }}>
   {{ content }}
@@ -90,9 +93,44 @@ the named keys. It never changes the original. Pass one name, several names or a
 
 Unknown names are ignored. The behavior matches Drupal's `without` filter.
 
-The filter keeps Twig's escaping rules. It does not mark its output as safe.
-Under Twig autoescape, an attribute collection kept in a variable is escaped like
-any other value. Timber turns autoescape off by default.
+The filter itself is not marked safe. A collection prints as HTML only after
+`registerSafeClass()` ran (see [Autoescape](#autoescape)).
+
+### Autoescape
+
+With Twig autoescape on (for example `'autoescape' => 'html'`), register the safe
+class once, right after you add the extension:
+
+```php
+$twig->addExtension(new \Parisek\Twig\AttributeExtension());
+\Parisek\Twig\AttributeExtension::registerSafeClass($twig);
+```
+
+The call is safe to repeat. Call it before anything is rendered. It tells the Twig escaper that objects implementing
+the package's `MarkupInterface` are HTML. Strings, other `Stringable` values and
+arrays stay escaped.
+
+Timber and `parisek/timber-kit` turn autoescape off and need nothing.
+
+What to know:
+
+- The extension also calls `registerSafeClass()` on the first `create_attribute()`
+  or `without` call. This is a fallback, and it depends on the order of calls. A
+  collection from the template context that prints before the first such call is
+  escaped (over-escaped, never printed raw). Do not rely on the fallback.
+- Twig caches the safe lookup per exact class on the first escape. A
+  `MarkupInterface` object that Twig already escaped in that environment keeps
+  being escaped, including a subclass of `AttributeCollection` or another
+  implementation. Only `AttributeCollection` and the interface are repaired. This
+  fails closed: the output is over-escaped, never raw.
+- A class that implements `MarkupInterface` is declared trusted HTML. Twig prints
+  its whole `__toString()` output raw.
+- Attribute names and custom `AttributeValueBase` subclasses are trusted developer
+  input, as in Drupal. Never build a name from user input. A name with whitespace,
+  `=` or a NUL byte injects attributes. A value subclass that returns markup injects
+  markup. Attribute values are escaped.
+- Register on the environment you render with. Do not clone an environment (cloning
+  is deprecated in Twig 3.30 and not allowed in Twig 4).
 
 The full API (class methods, escape semantics, `without` filter behavior) mirrors
 [Drupal's Attribute class](https://api.drupal.org/api/drupal/core%21lib%21Drupal%21Core%21Template%21Attribute.php/class/Attribute/11.x).
