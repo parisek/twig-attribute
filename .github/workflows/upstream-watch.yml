@@ -79,7 +79,10 @@ jobs:
         run: |
           report="$RUNNER_TEMP/upstream-report.md"
           printf '%s\n' "$REPORT_BODY" > "$report"
-          number=$(gh issue list --state open --label dependencies --json number,title \
+          # Only issues that this workflow's own token created (author app/github-actions),
+          # so an issue with the same title by someone else is never overwritten.
+          number=$(gh issue list --state open --label dependencies --limit 200 \
+            --author app/github-actions --json number,title \
             --jq '[.[] | select(.title == env.ISSUE_TITLE)][0].number // empty')
           if [ -n "$number" ]; then
             gh issue edit "$number" --body-file "$report"

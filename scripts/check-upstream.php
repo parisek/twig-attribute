@@ -12,9 +12,10 @@ declare(strict_types=1);
  *   --upstream=DIR|URL    Where the five upstream files live. Default: the Drupal 11.x raw URL.
  *   --src=DIR             The vendored sources. Default: src/ of this repository.
  *   --commits=api|none|DIR  Where to read the commit lists. `api` (default) is the Drupal GitLab API,
- *                         `none` skips the commit check, DIR holds one <Name>.json per file.
+ *                         `none` skips the commit check, DIR holds <Name>.json (page 1), <Name>.2.json, ... per file.
  *   --reviewed=FILE       The last-reviewed marker. Default: .upstream-reviewed of this repository.
- *   --mark-reviewed=NAME  Record the newest upstream commit as reviewed by NAME. Refuses while drift exists.
+ *   --mark-reviewed=NAME  Record the newest upstream commit per file as reviewed by NAME. Refuses while drift exists.
+ *   --allow=URL_PREFIX    Replace the allowed download prefix (tests only). Default: git.drupalcode.org only.
  *
  * Exit codes: 0 no functional drift, 1 drift or a new SA-CORE commit, 2 download or parse error.
  * The Markdown report goes to stdout. Errors go to stderr.
@@ -24,10 +25,14 @@ declare(strict_types=1);
 
 final class UpstreamCheckError extends RuntimeException {}
 
+/**
+ * @phpstan-type Commit array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool}
+ * @phpstan-type CommitWithFiles array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool, files: list<string>}
+ */
 final class UpstreamCheck
 {
     public const UPSTREAM_URL = 'https://git.drupalcode.org/project/drupal/-/raw/11.x/core/lib/Drupal/Core/Template';
-    public const COMMITS_URL = 'https://git.drupalcode.org/api/v4/projects/project%2Fdrupal/repository/commits?ref_name=11.x&per_page=20&path=';
+    public const COMMITS_URL = 'https://git.drupalcode.org/api/v4/projects/project%2Fdrupal/repository/commits?ref_name=11.x&per_page=100&path=';
     public const UPSTREAM_PATH = 'core/lib/Drupal/Core/Template/';
 
     /** Upstream file name (without .php) => local file name in src/. */
@@ -65,6 +70,14 @@ final class UpstreamCheck
     public const DROPPED_ATTRIBUTES = ['JsonSchema'];
 
     private const MAX_REPORT_BYTES = 60000;
+    private const MAX_COMMITS = 50;
+    private const MAX_TITLE_BYTES = 200;
+    private const MAX_PAGES = 20;
+    private const PER_PAGE = 100;
+    private const MAX_DOWNLOAD_BYTES = 2_097_152;
+    private const TOTAL_TIMEOUT = 60;
+
+    private static ?string $allowOverride = null;
 
     /**
      * @param list<string> $argv
@@ -78,6 +91,7 @@ final class UpstreamCheck
             'commits' => 'api',
             'reviewed' => $root . '/.upstream-reviewed',
             'mark-reviewed' => null,
+            'allow' => null,
         ];
         foreach (array_slice($argv, 1) as $argument) {
             if (!preg_match('/^--([a-z-]+)=(.*)$/s', $argument, $m) || !array_key_exists($m[1], $options)) {
@@ -87,6 +101,8 @@ final class UpstreamCheck
             }
             $options[$m[1]] = $m[2];
         }
+
+        self::$allowOverride = $options['allow'];
 
         try {
             return self::run($options);
@@ -103,51 +119,80 @@ final class UpstreamCheck
     private static function run(array $options): int
     {
         $diffs = self::compare((string) $options['upstream'], (string) $options['src']);
-
         $commitsMode = (string) $options['commits'];
         $reviewedFile = (string) $options['reviewed'];
-        $reviewed = null;
-        $perFile = [];
-        if ($commitsMode !== 'none') {
-            $perFile = self::fetchCommits($commitsMode);
-            $reviewed = $options['mark-reviewed'] === null ? self::readReviewed($reviewedFile) : null;
-        }
 
         if ($options['mark-reviewed'] !== null) {
-            if ($commitsMode === 'none') {
-                throw new UpstreamCheckError('--mark-reviewed needs the commit lists. Do not use --commits=none.');
-            }
-            if ($diffs !== []) {
-                fwrite(STDOUT, self::report($diffs, [], $reviewed));
-                fwrite(STDERR, "check-upstream: functional drift exists. Port it, or add an intended rule to the script, before you mark the state as reviewed.\n");
-
-                return 1;
-            }
-            $newest = self::newest($perFile);
-            if ($newest === null) {
-                throw new UpstreamCheckError('The commit lists are empty. Nothing to mark.');
-            }
-            $payload = [
-                'commit' => $newest['id'],
-                'date' => $newest['committed_date'],
-                'reviewed_by' => (string) $options['mark-reviewed'],
-                'title' => $newest['title'],
-            ];
-            $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-            if ($json === false || file_put_contents($reviewedFile, $json . "\n") === false) {
-                throw new UpstreamCheckError("Cannot write {$reviewedFile}.");
-            }
-            fwrite(STDOUT, "Marked {$newest['id']} ({$newest['committed_date']}) as reviewed by {$options['mark-reviewed']}.\n");
-
-            return 0;
+            return self::markReviewed($diffs, $commitsMode, $reviewedFile, (string) $options['mark-reviewed']);
         }
 
-        $newCommits = self::newerThan($perFile, $reviewed);
-        fwrite(STDOUT, self::report($diffs, $newCommits, $reviewed));
+        $reviewed = null;
+        $merged = [];
+        $lost = [];
+        if ($commitsMode !== 'none') {
+            $reviewed = self::readReviewed($reviewedFile);
+            foreach (array_keys(self::FILES) as $name) {
+                $history = self::readHistory($commitsMode, $name, $reviewed['files'][$name]);
+                if (!$history['found']) {
+                    $lost[$name] = $history['listed'];
+                }
+                // Merge by commit id: a commit that touches several files appears once.
+                foreach ($history['new'] as $commit) {
+                    $merged[$commit['id']] ??= $commit + ['files' => []];
+                    $merged[$commit['id']]['files'][] = "{$name}.php";
+                }
+            }
+        }
+        $commits = array_values($merged);
+        // Display order only. The boundary above never uses dates.
+        usort($commits, static fn(array $x, array $y): int => strtotime($y['committed_date']) <=> strtotime($x['committed_date']));
+        fwrite(STDOUT, self::report($diffs, $commits, $lost, $reviewed));
 
-        $security = array_filter($newCommits, static fn(array $c): bool => $c['security']);
+        $security = array_filter($commits, static fn(array $c): bool => $c['security']);
 
-        return ($diffs !== [] || $security !== []) ? 1 : 0;
+        return ($diffs !== [] || $security !== [] || $lost !== []) ? 1 : 0;
+    }
+
+    /**
+     * @param array<string, string> $diffs
+     */
+    private static function markReviewed(array $diffs, string $commitsMode, string $reviewedFile, string $who): int
+    {
+        if ($commitsMode === 'none') {
+            throw new UpstreamCheckError('--mark-reviewed needs the commit lists. Do not use --commits=none.');
+        }
+        if ($diffs !== []) {
+            fwrite(STDOUT, self::report($diffs, [], [], null));
+            fwrite(STDERR, "check-upstream: functional drift exists. Port it, or add an intended rule to the script, before you mark the state as reviewed.\n");
+
+            return 1;
+        }
+        $files = [];
+        $newest = null;
+        foreach (array_keys(self::FILES) as $name) {
+            $commit = self::readHistory($commitsMode, $name, null)['newest'];
+            if ($commit === null) {
+                throw new UpstreamCheckError("The commit list for {$name}.php is empty. Nothing to mark.");
+            }
+            $files[$name] = $commit['id'];
+            if ($newest === null || strtotime($commit['committed_date']) > strtotime($newest['committed_date'])) {
+                $newest = $commit;
+            }
+        }
+        $payload = [
+            'commit' => $newest['id'],
+            'date' => $newest['committed_date'],
+            'reviewed_by' => $who,
+            'title' => $newest['title'],
+            'files' => $files,
+        ];
+        $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if ($json === false || file_put_contents($reviewedFile, $json . "\n") === false) {
+            throw new UpstreamCheckError("Cannot write {$reviewedFile}.");
+        }
+        fwrite(STDOUT, "Marked {$newest['id']} ({$newest['committed_date']}) as reviewed by {$who}.\n");
+
+        return 0;
     }
 
     // ---------------------------------------------------------------- comparison
@@ -159,8 +204,8 @@ final class UpstreamCheck
     {
         $diffs = [];
         foreach (self::FILES as $name => $local) {
-            $upstreamCode = self::fetch(rtrim($upstream, '/') . "/{$name}.php");
-            $localCode = self::fetch(rtrim($src, '/') . "/{$local}.php");
+            $upstreamCode = self::fetch(rtrim($upstream, '/') . "/{$name}.php", self::allowed('raw'));
+            $localCode = self::fetch(rtrim($src, '/') . "/{$local}.php", '');
             $expected = self::normalizeUpstream($upstreamCode, "upstream {$name}.php");
             $actual = self::canonicalLines($localCode, "src/{$local}.php");
             $diff = self::unifiedDiff($expected, $actual, "upstream/{$name}.php (normalized)", "src/{$local}.php");
@@ -562,69 +607,91 @@ final class UpstreamCheck
     // ------------------------------------------------------------------ commits
 
     /**
-     * @return array<string, list<array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool}>>
-     */
-    private static function fetchCommits(string $mode): array
-    {
-        $result = [];
-        foreach (array_keys(self::FILES) as $name) {
-            $source = $mode === 'api'
-                ? self::COMMITS_URL . rawurlencode(self::UPSTREAM_PATH . $name . '.php')
-                : rtrim($mode, '/') . "/{$name}.json";
-            try {
-                $data = json_decode(self::fetch($source), true, 512, JSON_THROW_ON_ERROR);
-            } catch (JsonException $e) {
-                throw new UpstreamCheckError("Cannot parse the commit list for {$name}.php: " . $e->getMessage());
-            }
-            if (!is_array($data)) {
-                throw new UpstreamCheckError("The commit list for {$name}.php is not a list.");
-            }
-            $list = [];
-            foreach ($data as $commit) {
-                foreach (['id', 'title', 'committed_date'] as $key) {
-                    if (!is_array($commit) || !isset($commit[$key]) || !is_string($commit[$key])) {
-                        throw new UpstreamCheckError("A commit of {$name}.php has no `{$key}`.");
-                    }
-                }
-                if (strtotime($commit['committed_date']) === false) {
-                    throw new UpstreamCheckError("A commit of {$name}.php has a bad date: {$commit['committed_date']}");
-                }
-                $list[] = [
-                    'id' => $commit['id'],
-                    'short_id' => is_string($commit['short_id'] ?? null) ? $commit['short_id'] : substr($commit['id'], 0, 10),
-                    'title' => $commit['title'],
-                    'committed_date' => $commit['committed_date'],
-                    'web_url' => is_string($commit['web_url'] ?? null) ? $commit['web_url'] : '',
-                    'security' => stripos($commit['title'], 'SA-CORE') !== false,
-                ];
-            }
-            $result[$name] = $list;
-        }
-
-        return $result;
-    }
-
-    /**
-     * @param array<string, list<array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool}>> $perFile
+     * Reads the history of one file, newest first, page by page, until the reviewed commit.
+     * The boundary is the commit id (reachability), never a date: a cherry-pick keeps an old date.
+     * Without a boundary, only the newest commit matters, so only page 1 is read.
      *
-     * @return array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool}|null
+     * @return array{newest: ?Commit, new: list<Commit>, found: bool, listed: int}
      */
-    private static function newest(array $perFile): ?array
+    private static function readHistory(string $mode, string $name, ?string $boundary): array
     {
+        $new = [];
         $newest = null;
-        foreach ($perFile as $list) {
-            foreach ($list as $commit) {
-                if ($newest === null || strtotime($commit['committed_date']) > strtotime($newest['committed_date'])) {
-                    $newest = $commit;
+        $listed = 0;
+        for ($page = 1; $page <= self::MAX_PAGES; $page++) {
+            [$commits, $hasNext] = self::commitPage($mode, $name, $page);
+            foreach ($commits as $commit) {
+                $newest ??= $commit;
+                if ($boundary === null) {
+                    return ['newest' => $newest, 'new' => [], 'found' => true, 'listed' => 1];
                 }
+                if ($commit['id'] === $boundary) {
+                    return ['newest' => $newest, 'new' => $new, 'found' => true, 'listed' => $listed];
+                }
+                $new[] = $commit;
+                $listed++;
+            }
+            if (!$hasNext) {
+                break;
             }
         }
 
-        return $newest;
+        return ['newest' => $newest, 'new' => $new, 'found' => false, 'listed' => $listed];
     }
 
     /**
-     * @return array{commit: string, date: string, reviewed_by: string}
+     * @return array{list<Commit>, bool} One page of commits and whether another page follows.
+     */
+    private static function commitPage(string $mode, string $name, int $page): array
+    {
+        if ($mode === 'api') {
+            [$body, $headers] = self::httpGet(self::COMMITS_URL . rawurlencode(self::UPSTREAM_PATH . $name . '.php') . '&page=' . $page, self::allowed('api'));
+            $hasNext = false;
+            foreach ($headers as $header) {
+                if (stripos($header, 'x-next-page:') === 0 && trim(substr($header, 12)) !== '') {
+                    $hasNext = true;
+                }
+            }
+        } else {
+            $dir = rtrim($mode, '/');
+            $body = self::fetch($dir . '/' . $name . ($page === 1 ? '' : ".{$page}") . '.json', '');
+            $hasNext = is_file($dir . '/' . $name . '.' . ($page + 1) . '.json');
+        }
+
+        try {
+            $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new UpstreamCheckError("Cannot parse the commit list for {$name}.php: " . $e->getMessage());
+        }
+        if (!is_array($data)) {
+            throw new UpstreamCheckError("The commit list for {$name}.php is not a list.");
+        }
+        $list = [];
+        foreach ($data as $commit) {
+            foreach (['id', 'title', 'committed_date'] as $key) {
+                if (!is_array($commit) || !isset($commit[$key]) || !is_string($commit[$key])) {
+                    throw new UpstreamCheckError("A commit of {$name}.php has no `{$key}`.");
+                }
+            }
+            if (preg_match('/^[0-9a-f]{40}$/', $commit['id']) !== 1) {
+                throw new UpstreamCheckError("A commit of {$name}.php has a bad id.");
+            }
+            $url = is_string($commit['web_url'] ?? null) ? $commit['web_url'] : '';
+            $list[] = [
+                'id' => $commit['id'],
+                'short_id' => substr($commit['id'], 0, 10),
+                'title' => $commit['title'],
+                'committed_date' => $commit['committed_date'],
+                'web_url' => str_starts_with($url, 'https://git.drupalcode.org/') ? $url : '',
+                'security' => stripos($commit['title'], 'SA-CORE') !== false,
+            ];
+        }
+
+        return [$list, $hasNext];
+    }
+
+    /**
+     * @return array{commit: string, date: string, reviewed_by: string, files: array<string, string>}
      */
     private static function readReviewed(string $file): array
     {
@@ -642,68 +709,67 @@ final class UpstreamCheck
                 throw new UpstreamCheckError("{$file} has no `{$key}`.");
             }
         }
-        if (strtotime($data['date']) === false) {
-            throw new UpstreamCheckError("{$file} has a bad date.");
-        }
-
-        return ['commit' => $data['commit'], 'date' => $data['date'], 'reviewed_by' => $data['reviewed_by']];
-    }
-
-    /**
-     * Commits newer than the reviewed one, newest first. A commit that touches several files appears once.
-     *
-     * @param array<string, list<array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool}>> $perFile
-     * @param array{commit: string, date: string, reviewed_by: string}|null $reviewed
-     *
-     * @return list<array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool, files: list<string>}>
-     */
-    private static function newerThan(array $perFile, ?array $reviewed): array
-    {
-        if ($reviewed === null) {
-            return [];
-        }
-        $limit = strtotime($reviewed['date']);
-        $found = [];
-        foreach ($perFile as $name => $list) {
-            foreach ($list as $commit) {
-                if ($commit['id'] === $reviewed['commit'] || strtotime($commit['committed_date']) <= $limit) {
-                    continue;
-                }
-                $found[$commit['id']] ??= $commit + ['files' => []];
-                $found[$commit['id']]['files'][] = "{$name}.php";
+        $files = [];
+        foreach (array_keys(self::FILES) as $name) {
+            $id = is_array($data['files'] ?? null) ? ($data['files'][$name] ?? null) : null;
+            if (!is_string($id) || preg_match('/^[0-9a-f]{40}$/', $id) !== 1) {
+                throw new UpstreamCheckError("{$file} has no `files.{$name}` commit id. Re-create the file with --mark-reviewed=NAME.");
             }
+            $files[$name] = $id;
         }
-        $found = array_values($found);
-        usort($found, static fn(array $x, array $y): int => strtotime($y['committed_date']) <=> strtotime($x['committed_date']));
 
-        return $found;
+        return ['commit' => $data['commit'], 'date' => $data['date'], 'reviewed_by' => $data['reviewed_by'], 'files' => $files];
     }
 
     // ------------------------------------------------------------------- report
 
     /**
+     * Builds the report and keeps it under the size limit: fewer diff lines first, then fewer commits, then a hard cut.
+     *
      * @param array<string, string> $diffs
-     * @param list<array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool, files: list<string>}> $commits
-     * @param array{commit: string, date: string, reviewed_by: string}|null $reviewed
+     * @param list<CommitWithFiles> $commits
+     * @param array<string, int> $lost File name => commits listed before the reader gave up.
+     * @param array{commit: string, date: string, reviewed_by: string, files: array<string, string>}|null $reviewed
      */
-    private static function report(array $diffs, array $commits, ?array $reviewed): string
+    private static function report(array $diffs, array $commits, array $lost, ?array $reviewed): string
     {
-        foreach ([null, 200, 40] as $maxDiffLines) {
-            $report = self::renderReport($diffs, $commits, $reviewed, $maxDiffLines);
+        $report = '';
+        foreach ([[null, self::MAX_COMMITS], [200, self::MAX_COMMITS], [40, self::MAX_COMMITS], [10, 20]] as [$maxDiffLines, $maxCommits]) {
+            $report = self::renderReport($diffs, $commits, $lost, $reviewed, $maxDiffLines, $maxCommits);
             if (strlen($report) <= self::MAX_REPORT_BYTES) {
                 return $report;
             }
         }
 
-        return $report;
+        $notice = "\n\n> **Report truncated.** Run `php scripts/check-upstream.php` to see all of it.\n";
+        $cut = substr($report, 0, self::MAX_REPORT_BYTES - strlen($notice));
+        while ($cut !== '' && preg_match('//u', $cut) !== 1) {
+            $cut = substr($cut, 0, -1);
+        }
+
+        return $cut . $notice;
+    }
+
+    /** Neutral text for the report: no control characters, a length limit, valid UTF-8, HTML-escaped inside <code>. */
+    private static function clean(string $text, int $max = self::MAX_TITLE_BYTES): string
+    {
+        $text = (string) preg_replace('/[\x00-\x1F\x7F]+/', ' ', $text);
+        $cut = strlen($text) > $max;
+        $text = substr($text, 0, $max);
+        while ($text !== '' && preg_match('//u', $text) !== 1) {
+            $text = substr($text, 0, -1);
+        }
+
+        return '<code>' . htmlspecialchars($text, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . ($cut ? '…' : '') . '</code>';
     }
 
     /**
      * @param array<string, string> $diffs
-     * @param list<array{id: string, short_id: string, title: string, committed_date: string, web_url: string, security: bool, files: list<string>}> $commits
-     * @param array{commit: string, date: string, reviewed_by: string}|null $reviewed
+     * @param list<CommitWithFiles> $commits
+     * @param array<string, int> $lost
+     * @param array{commit: string, date: string, reviewed_by: string, files: array<string, string>}|null $reviewed
      */
-    private static function renderReport(array $diffs, array $commits, ?array $reviewed, ?int $maxDiffLines): string
+    private static function renderReport(array $diffs, array $commits, array $lost, ?array $reviewed, ?int $maxDiffLines, int $maxCommits): string
     {
         $security = array_filter($commits, static fn(array $c): bool => $c['security']);
         $out = [];
@@ -713,23 +779,38 @@ final class UpstreamCheck
             $out[] = '> **High priority.** ' . count($security) . ' upstream commit(s) mention SA-CORE. Review them first.';
             $out[] = '';
         }
-        if ($diffs === [] && $commits === []) {
+        if ($diffs === [] && $commits === [] && $lost === []) {
             $out[] = 'No functional difference. No upstream commit since the last review.';
 
             return implode("\n", $out) . "\n";
+        }
+
+        if ($lost !== []) {
+            $out[] = '### Review boundary lost';
+            $out[] = '';
+            $out[] = 'The reviewed commit was not found in the upstream history of these files, within ' . self::MAX_PAGES . ' pages of ' . self::PER_PAGE . ' commits. The script cannot tell what changed since the last review, so it fails instead of passing.';
+            $out[] = '';
+            foreach ($lost as $name => $listed) {
+                $out[] = "- {$name}.php: {$listed} commits read";
+            }
+            $out[] = '';
+            $out[] = 'Read the recent history of these files by hand. Then run `--mark-reviewed` to set a new boundary.';
+            $out[] = '';
         }
 
         if ($commits !== []) {
             $out[] = '### Upstream commits since the last review';
             $out[] = '';
             if ($reviewed !== null) {
-                $out[] = "Last reviewed: `{$reviewed['commit']}` ({$reviewed['date']}, {$reviewed['reviewed_by']}).";
+                $out[] = "Last reviewed: `{$reviewed['commit']}` ({$reviewed['date']}), by " . self::clean($reviewed['reviewed_by'], 100) . '.';
                 $out[] = '';
             }
-            foreach ($commits as $commit) {
-                $title = str_replace(["\r", "\n", '|'], ' ', $commit['title']);
+            foreach (array_slice($commits, 0, $maxCommits) as $commit) {
                 $link = $commit['web_url'] !== '' ? "[`{$commit['short_id']}`]({$commit['web_url']})" : "`{$commit['short_id']}`";
-                $out[] = "- {$link} {$commit['committed_date']}" . ($commit['security'] ? ' **SA-CORE**' : '') . ': ' . $title . ' (' . implode(', ', $commit['files']) . ')';
+                $out[] = "- {$link} " . self::clean($commit['committed_date'], 40) . ($commit['security'] ? ' **SA-CORE**' : '') . ': ' . self::clean($commit['title']) . ' (' . implode(', ', $commit['files']) . ')';
+            }
+            if (count($commits) > $maxCommits) {
+                $out[] = '- … and ' . (count($commits) - $maxCommits) . ' more commit(s) not listed. Run the script to see them.';
             }
             $out[] = '';
         }
@@ -784,31 +865,86 @@ final class UpstreamCheck
 
     // ------------------------------------------------------------------ network
 
-    private static function fetch(string $location): string
+    /** The URL prefix that a download must start with. `--allow` replaces it (tests only). */
+    private static function allowed(string $kind): string
     {
-        if (preg_match('#^https?://#i', $location) !== 1) {
-            $body = @file_get_contents($location);
-            if ($body === false) {
-                throw new UpstreamCheckError("Cannot read {$location}.");
-            }
+        return self::$allowOverride ?? ($kind === 'api' ? 'https://git.drupalcode.org/api/v4/' : 'https://git.drupalcode.org/');
+    }
 
-            return $body;
+    /**
+     * Reads a local file, or downloads a URL that starts with $allowedPrefix.
+     * Any other scheme is refused, so a bad option cannot reach `php://`, `ftp://` or another host.
+     */
+    private static function fetch(string $location, string $allowedPrefix): string
+    {
+        if (preg_match('#^https?://#i', $location) === 1) {
+            return self::httpGet($location, $allowedPrefix)[0];
+        }
+        if (preg_match('#^[a-z][a-z0-9+.-]+:#i', $location) === 1) {
+            throw new UpstreamCheckError("{$location} is not allowed. Use a local directory or {$allowedPrefix}...");
+        }
+        $body = @file_get_contents($location);
+        if ($body === false) {
+            throw new UpstreamCheckError("Cannot read {$location}.");
         }
 
+        return $body;
+    }
+
+    /**
+     * @return array{string, list<string>} Body and response headers.
+     */
+    private static function httpGet(string $url, string $allowedPrefix): array
+    {
+        if ($allowedPrefix === '' || !str_starts_with($url, $allowedPrefix)) {
+            throw new UpstreamCheckError("{$url} is not allowed. Use {$allowedPrefix}...");
+        }
+
+        ini_set('default_socket_timeout', '15');
         $context = stream_context_create(['http' => [
-            'timeout' => 30,
+            'timeout' => 15,
             'ignore_errors' => true,
+            'follow_location' => 0,
+            'max_redirects' => 0,
             'header' => "User-Agent: parisek-twig-attribute-upstream-watch\r\nAccept: */*\r\n",
         ]]);
         $status = 0;
         for ($attempt = 1; $attempt <= 2; $attempt++) {
-            $http_response_header = [];
-            $body = @file_get_contents($location, false, $context);
-            $status = isset($http_response_header[0]) && preg_match('#^HTTP/\S+\s+(\d{3})#', $http_response_header[0], $m) === 1 ? (int) $m[1] : 0;
-            if ($body !== false && $status === 200) {
-                return $body;
+            $handle = @fopen($url, 'rb', false, $context);
+            $status = 0;
+            if ($handle !== false) {
+                $headers = [];
+                $meta = stream_get_meta_data($handle)['wrapper_data'] ?? [];
+                foreach (is_array($meta) ? $meta : [] as $line) {
+                    $headers[] = (string) $line;
+                }
+                if (isset($headers[0]) && preg_match('#^HTTP/\S+\s+(\d{3})#', $headers[0], $m) === 1) {
+                    $status = (int) $m[1];
+                }
+                $body = '';
+                $deadline = time() + self::TOTAL_TIMEOUT;
+                while (!feof($handle)) {
+                    $chunk = fread($handle, 65536);
+                    if ($chunk === false) {
+                        break;
+                    }
+                    $body .= $chunk;
+                    if (strlen($body) > self::MAX_DOWNLOAD_BYTES) {
+                        fclose($handle);
+                        throw new UpstreamCheckError("Download of {$url} is too large (limit " . self::MAX_DOWNLOAD_BYTES . ' bytes).');
+                    }
+                    if (time() > $deadline) {
+                        fclose($handle);
+                        throw new UpstreamCheckError("Download of {$url} took more than " . self::TOTAL_TIMEOUT . ' seconds.');
+                    }
+                }
+                fclose($handle);
+                if ($status === 200) {
+                    return [$body, $headers];
+                }
             }
-            if ($status >= 400 && $status < 500 && $status !== 429) {
+            // A redirect or a client error does not heal by retry.
+            if (($status >= 300 && $status < 500) && $status !== 429) {
                 break;
             }
             if ($attempt < 2) {
@@ -816,7 +952,7 @@ final class UpstreamCheck
             }
         }
 
-        throw new UpstreamCheckError("Cannot download {$location} (HTTP status {$status}).");
+        throw new UpstreamCheckError("Cannot download {$url} (HTTP status {$status}).");
     }
 }
 

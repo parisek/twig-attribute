@@ -2,5 +2,12 @@
     "commit": "79f8c2163fc15f39beda20d3be316b0a2fe82ec4",
     "date": "2026-04-15T20:26:00.000+03:00",
     "reviewed_by": "Claude Code (baseline for issue #25; no functional drift on 2026-10-09)",
-    "title": "SA-CORE-2026-002 by hswww, menon, t-chen, benjifisher, cilefen, drumm, greggles, larowlan, longwave, mcdruid, ram4nd, xjm, poker10"
+    "title": "SA-CORE-2026-002 by hswww, menon, t-chen, benjifisher, cilefen, drumm, greggles, larowlan, longwave, mcdruid, ram4nd, xjm, poker10",
+    "files": {
+        "Attribute": "79f8c2163fc15f39beda20d3be316b0a2fe82ec4",
+        "AttributeArray": "3fe359f6f17a5788d0d9ba29beec54865a0259dc",
+        "AttributeBoolean": "bfde6d34239a9e05e1f5f5346d335a615c28bedf",
+        "AttributeString": "bd12c4188147e52b746aeb5447d8df1dfe3921e3",
+        "AttributeValueBase": "7735d0ed4a3d622dbb4b42243b54f4c92c1e6d07"
+    }
 }

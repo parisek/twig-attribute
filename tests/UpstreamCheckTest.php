@@ -77,31 +77,59 @@ final class UpstreamCheckTest extends TestCase
         file_put_contents($file, str_replace($search, $replace, $code));
     }
 
+    /** Id of the single commit that the other four files have. */
+    private function baseId(string $name): string
+    {
+        return str_repeat((string) array_search($name, self::NAMES, true), 40);
+    }
+
     /**
+     * Writes the commit lists. `Attribute` gets $list as page 1 and $morePages as pages 2, 3, ... (newest first).
+     * The other files each have one commit that `reviewed()` records as their boundary.
+     *
      * @param list<array{id: string, title: string, date: string}> $list
+     * @param list<list<array{id: string, title: string, date: string}>> $morePages
      */
-    private function commits(array $list): string
+    private function commits(array $list, array $morePages = []): string
     {
         $dir = $this->tmp . '/commits';
         @mkdir($dir);
-        $rows = array_map(static fn(array $c): array => [
+        $rows = static fn(array $page): string => json_encode(array_map(static fn(array $c): array => [
             'id' => $c['id'],
             'short_id' => substr($c['id'], 0, 10),
             'title' => $c['title'],
             'committed_date' => $c['date'],
             'web_url' => 'https://example.invalid/' . $c['id'],
-        ], $list);
+        ], $page), JSON_THROW_ON_ERROR);
         foreach (self::NAMES as $name) {
-            file_put_contents("{$dir}/{$name}.json", json_encode($name === 'Attribute' ? $rows : [], JSON_THROW_ON_ERROR));
+            if ($name === 'Attribute') {
+                file_put_contents("{$dir}/Attribute.json", $rows($list));
+                foreach ($morePages as $i => $page) {
+                    file_put_contents($dir . '/Attribute.' . ($i + 2) . '.json', $rows($page));
+                }
+
+                continue;
+            }
+            file_put_contents("{$dir}/{$name}.json", $rows([['id' => $this->baseId($name), 'title' => 'base', 'date' => '2000-01-01T00:00:00.000+00:00']]));
         }
 
         return $dir;
     }
 
-    private function reviewed(string $id, string $date): string
+    private function commit(string $char, string $title = 'docs: change', string $date = '2099-01-01T10:00:00.000+00:00'): array
     {
+        return ['id' => str_repeat($char, 40), 'title' => $title, 'date' => $date];
+    }
+
+    /** Records `$attributeCommit` as the reviewed boundary of Attribute.php. */
+    private function reviewed(string $attributeCommit): string
+    {
+        $files = [];
+        foreach (self::NAMES as $name) {
+            $files[$name] = $name === 'Attribute' ? $attributeCommit : $this->baseId($name);
+        }
         $file = $this->tmp . '/reviewed.json';
-        file_put_contents($file, json_encode(['commit' => $id, 'date' => $date, 'reviewed_by' => 'test'], JSON_THROW_ON_ERROR));
+        file_put_contents($file, json_encode(['commit' => $attributeCommit, 'date' => '2098-01-01T10:00:00.000+00:00', 'reviewed_by' => 'test', 'files' => $files], JSON_THROW_ON_ERROR));
 
         return $file;
     }
@@ -192,7 +220,7 @@ final class UpstreamCheckTest extends TestCase
             ['id' => str_repeat('a', 40), 'title' => 'Old', 'date' => '2098-01-01T10:00:00.000+00:00'],
         ]);
 
-        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40), '2098-01-01T10:00:00.000+00:00')], true);
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40))], true);
 
         self::assertSame(1, $code);
         self::assertStringContainsString('SA-CORE-2099-001', $out);
@@ -207,7 +235,7 @@ final class UpstreamCheckTest extends TestCase
             ['id' => str_repeat('a', 40), 'title' => 'Old', 'date' => '2098-01-01T10:00:00.000+00:00'],
         ]);
 
-        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40), '2098-01-01T10:00:00.000+00:00')], true);
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40))], true);
 
         self::assertSame(0, $code, $out);
         self::assertStringContainsString('docs: Typo', $out);
@@ -219,7 +247,7 @@ final class UpstreamCheckTest extends TestCase
             ['id' => str_repeat('c', 40), 'title' => 'SA-CORE-2099-001 Fix', 'date' => '2099-02-01T10:00:00.000+00:00'],
         ]);
 
-        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('c', 40), '2099-02-01T10:00:00.000+00:00')], true);
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('c', 40))], true);
 
         self::assertSame(0, $code, $out);
         self::assertStringNotContainsString('SA-CORE', $out);
@@ -240,6 +268,8 @@ final class UpstreamCheckTest extends TestCase
         self::assertSame(str_repeat('c', 40), $data['commit']);
         self::assertSame('2099-02-01T10:00:00.000+00:00', $data['date']);
         self::assertSame('Test Person', $data['reviewed_by']);
+        self::assertSame(str_repeat('c', 40), $data['files']['Attribute']);
+        self::assertSame($this->baseId('AttributeArray'), $data['files']['AttributeArray']);
     }
 
     public function testMarkReviewedRefusesWhileDriftExists(): void
@@ -260,6 +290,10 @@ final class UpstreamCheckTest extends TestCase
         self::assertMatchesRegularExpression('/^[0-9a-f]{40}$/', $data['commit']);
         self::assertNotFalse(strtotime($data['date']));
         self::assertNotSame('', $data['reviewed_by']);
+        self::assertSame(array_keys($data['files']), self::NAMES);
+        foreach ($data['files'] as $id) {
+            self::assertMatchesRegularExpression('/^[0-9a-f]{40}$/', $id);
+        }
     }
 
     public function testCurrentSourcesMatchTheSnapshot(): void
@@ -270,5 +304,168 @@ final class UpstreamCheckTest extends TestCase
         [$code, $out] = $this->check(['--src=' . dirname(__DIR__) . '/src']);
 
         self::assertSame(0, $code, $out);
+    }
+
+    public function testBoundaryOnALaterPageIsFound(): void
+    {
+        $dir = $this->commits(
+            [$this->commit('f', 'SA-CORE-2099-009 Fix')],
+            [[$this->commit('e')], [$this->commit('a')]],
+        );
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40))], true);
+
+        self::assertSame(1, $code);
+        self::assertStringContainsString('SA-CORE-2099-009', $out);
+        self::assertStringContainsString('docs: change', $out);
+    }
+
+    public function testBoundaryNotFoundWithinThePageCapIsReported(): void
+    {
+        $pages = [];
+        for ($i = 0; $i < 25; $i++) {
+            $pages[] = [$this->commit('d', 'docs: page ' . $i)];
+        }
+        $dir = $this->commits([$this->commit('f')], $pages);
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40))], true);
+
+        self::assertSame(1, $code);
+        self::assertStringContainsString('Review boundary lost', $out);
+        self::assertStringContainsString('Attribute.php', $out);
+    }
+
+    public function testBoundaryMissingFromTheListIsReported(): void
+    {
+        $dir = $this->commits([$this->commit('f')]);
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40))], true);
+
+        self::assertSame(1, $code);
+        self::assertStringContainsString('Review boundary lost', $out);
+    }
+
+    public function testSecurityCommitWithAnOldTimestampIsStillReported(): void
+    {
+        // A cherry-pick keeps an old author date. The boundary is the commit id, not a date.
+        $dir = $this->commits([
+            $this->commit('c', 'SA-CORE-2099-002 Backport', '1999-01-01T00:00:00.000+00:00'),
+            $this->commit('a', 'Reviewed', '2098-01-01T10:00:00.000+00:00'),
+        ]);
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40))], true);
+
+        self::assertSame(1, $code);
+        self::assertStringContainsString('SA-CORE-2099-002', $out);
+    }
+
+    public function testHostileAndOversizedTitlesAreContained(): void
+    {
+        $hostile = "x</details>\n# Injected\n@someone <script>alert(1)</script>" . str_repeat('A', 5000) . "\x01";
+        $list = [$this->commit('b', $hostile)];
+        for ($i = 0; $i < 120; $i++) {
+            $list[] = ['id' => sprintf('%040x', 0x1000 + $i), 'title' => 'docs: ' . $i, 'date' => '2099-01-01T10:00:00.000+00:00'];
+        }
+        $list[] = $this->commit('a');
+        $dir = $this->commits($list);
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $this->reviewed(str_repeat('a', 40))], true);
+
+        self::assertSame(0, $code);
+        self::assertStringNotContainsString('<script>', $out);
+        self::assertStringNotContainsString("\n# Injected", $out);
+        self::assertStringNotContainsString("\x01", $out);
+        self::assertStringNotContainsString(str_repeat('A', 300), $out);
+        self::assertStringContainsString('more commit', $out);
+        self::assertLessThan(60000, strlen($out));
+    }
+
+    public function testTheReportStaysBelowTheSizeLimit(): void
+    {
+        // Every file differs in many lines: the diffs alone would be far above the limit.
+        foreach (self::NAMES as $name) {
+            $file = $this->tmp . "/upstream/{$name}.php";
+            $code = (string) file_get_contents($file);
+            $extra = '';
+            for ($i = 0; $i < 3000; $i++) {
+                $extra .= "\$x{$i} = {$i};\n";
+            }
+            file_put_contents($file, preg_replace('/(function [^\n]*\{\n)/', '$1' . $extra, $code, 1));
+        }
+
+        [$code, $out] = $this->check();
+
+        self::assertSame(1, $code);
+        self::assertLessThanOrEqual(60000, strlen($out));
+        self::assertStringContainsString('cut', $out);
+    }
+
+    public function testUpstreamUrlOutsideDrupalCodeIsRefused(): void
+    {
+        foreach (['https://example.com/x', 'http://git.drupalcode.org/x', 'https://git.drupalcode.org.evil.example/x', 'https://git.drupalcode.org@evil.example/x'] as $url) {
+            [$code, , $err] = $this->check(['--upstream=' . $url]);
+
+            self::assertSame(2, $code, $url);
+            self::assertStringContainsString('not allowed', $err, $url);
+        }
+    }
+
+    /**
+     * @return array{resource, int}|null
+     */
+    private function server(): ?array
+    {
+        $probe = stream_socket_server('tcp://127.0.0.1:0');
+        if ($probe === false) {
+            return null;
+        }
+        $port = (int) substr((string) stream_socket_get_name($probe, false), strrpos((string) stream_socket_get_name($probe, false), ':') + 1);
+        fclose($probe);
+        $process = proc_open(
+            [PHP_BINARY, '-S', "127.0.0.1:{$port}", '-t', $this->tmp . '/upstream', __DIR__ . '/fixtures/upstream-watch/router.php'],
+            [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']],
+            $pipes,
+        );
+        if (!is_resource($process)) {
+            return null;
+        }
+        for ($i = 0; $i < 50; $i++) {
+            $socket = @fsockopen('127.0.0.1', $port, $errno, $errstr, 0.2);
+            if ($socket !== false) {
+                fclose($socket);
+
+                return [$process, $port];
+            }
+            usleep(100000);
+        }
+        proc_terminate($process);
+
+        return null;
+    }
+
+    public function testRedirectsAndOversizedAnswersAreRefused(): void
+    {
+        $server = $this->server();
+        if ($server === null) {
+            self::markTestSkipped('Cannot start the PHP built-in server.');
+        }
+        [$process, $port] = $server;
+        try {
+            $base = "http://127.0.0.1:{$port}";
+
+            [$code, $out] = $this->check(['--allow=' . $base . '/', '--upstream=' . $base . '/ok']);
+            self::assertSame(0, $code, 'Control: the fake host works.' . $out);
+
+            [$code, , $err] = $this->check(['--allow=' . $base . '/', '--upstream=' . $base . '/redirect']);
+            self::assertSame(2, $code, 'A redirect must fail.');
+            self::assertStringContainsString('HTTP status 302', $err);
+
+            [$code, , $err] = $this->check(['--allow=' . $base . '/', '--upstream=' . $base . '/big']);
+            self::assertSame(2, $code, 'An oversized answer must fail.');
+            self::assertStringContainsString('too large', $err);
+        } finally {
+            proc_terminate($process);
+            proc_close($process);
+        }
     }
 }
