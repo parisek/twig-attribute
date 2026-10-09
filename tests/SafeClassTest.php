@@ -220,6 +220,20 @@ TWIG;
         self::assertSame(['html'], $this->htmlStrategies($twig));
     }
 
+    public function testSubclassEscapedBeforeRegistrationStaysEscaped(): void
+    {
+        // Twig caches the lookup per exact class on the first escape. Only
+        // AttributeCollection and the interface are repaired, so the subclass
+        // fails closed: over-escaped, never raw.
+        $subclass = new class (['id' => 'i']) extends AttributeCollection {};
+        $twig = $this->environment('{{ c }}');
+        $context = ['c' => $subclass];
+
+        self::assertSame(' id=&quot;i&quot;', $twig->render('t.twig', $context));
+        AttributeExtension::registerSafeClass($twig);
+        self::assertSame(' id=&quot;i&quot;', $twig->render('t.twig', $context));
+    }
+
     public function testLazyRegistrationDependsOnTheOrderOfCalls(): void
     {
         // The collection from the context prints before the first

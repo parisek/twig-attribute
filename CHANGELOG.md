@@ -12,7 +12,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
-- An attribute collection kept in a variable, for example `{% set a = create_attribute() %}<div{{ a.addClass("x") }}>`, was escaped a second time under Twig autoescape. New `AttributeExtension::registerSafeClass($twig)` declares `MarkupInterface` objects as HTML in the Twig escaper. Call it once after `addExtension()` when autoescape is on. Strings, other `Stringable` values and arrays stay escaped. As a fallback the extension calls it on the first `create_attribute()` or `without` call; that fallback depends on the order of calls. Timber and `timber-kit` (autoescape off) need nothing. A `MarkupInterface` class is trusted HTML; attribute names and custom `AttributeValueBase` subclasses stay trusted developer input, as in Drupal.
+- An attribute collection kept in a variable, for example `{% set a = create_attribute() %}<div{{ a.addClass("x") }}>`, was escaped a second time under Twig autoescape. New `AttributeExtension::registerSafeClass($twig)` declares `MarkupInterface` objects as HTML in the Twig escaper. Call it right after `addExtension()`, before anything is rendered, when autoescape is on. Objects that Twig already escaped in that environment keep being escaped, including subclasses of `AttributeCollection`. Strings, other `Stringable` values and arrays stay escaped. As a fallback the extension calls it on the first `create_attribute()` or `without` call; that fallback depends on the order of calls. Timber and `timber-kit` (autoescape off) need nothing. A `MarkupInterface` class is trusted HTML; attribute names and custom `AttributeValueBase` subclasses stay trusted developer input, as in Drupal.
 
 ## [1.6.1] - 2026-06-01
 

@@ -18,7 +18,12 @@ final class AttributeExtension extends AbstractExtension
      * Declares objects that implement MarkupInterface as trusted HTML in the
      * Twig escaper: their whole __toString() output is printed raw.
      *
-     * Call it once after addExtension() when autoescape is on. The extension
+     * Call it right after addExtension(), before anything is rendered, when
+     * autoescape is on. Twig caches the lookup per exact class on the first
+     * escape. An object that Twig already escaped in this environment keeps
+     * being escaped, and so does a subclass of AttributeCollection or another
+     * MarkupInterface class; only AttributeCollection and the interface are
+     * repaired. This fails closed. The extension
      * also calls it on the first create_attribute() or without call, but that
      * is a fallback and depends on the order of calls in the template.
      *

@@ -106,7 +106,7 @@ $twig->addExtension(new \Parisek\Twig\AttributeExtension());
 \Parisek\Twig\AttributeExtension::registerSafeClass($twig);
 ```
 
-The call is safe to repeat. It tells the Twig escaper that objects implementing
+The call is safe to repeat. Call it before anything is rendered. It tells the Twig escaper that objects implementing
 the package's `MarkupInterface` are HTML. Strings, other `Stringable` values and
 arrays stay escaped.
 
@@ -118,6 +118,11 @@ What to know:
   or `without` call. This is a fallback, and it depends on the order of calls. A
   collection from the template context that prints before the first such call is
   escaped (over-escaped, never printed raw). Do not rely on the fallback.
+- Twig caches the safe lookup per exact class on the first escape. A
+  `MarkupInterface` object that Twig already escaped in that environment keeps
+  being escaped, including a subclass of `AttributeCollection` or another
+  implementation. Only `AttributeCollection` and the interface are repaired. This
+  fails closed: the output is over-escaped, never raw.
 - A class that implements `MarkupInterface` is declared trusted HTML. Twig prints
   its whole `__toString()` output raw.
 - Attribute names and custom `AttributeValueBase` subclasses are trusted developer
