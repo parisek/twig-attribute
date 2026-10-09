@@ -13,6 +13,7 @@ port of Drupal's `Attribute` class.
 The package ships its own port (under `Drupal\Component\Attribute`) and does not
 depend on Drupal core. The maintainer refreshes the vendored sources from
 Drupal 11.x when upstream changes. The API matches what Drupal templates expect.
+One deliberate difference: this package rejects unsafe [attribute names](#attribute-names).
 
 ## Installation
 
@@ -100,6 +101,18 @@ Unknown names are ignored. The behavior matches Drupal's `without` filter.
 The filter itself is not marked safe. A collection prints as HTML only after
 `registerSafeClass()` ran (see [Autoescape](#autoescape)).
 
+### Attribute names
+
+A name is checked when the attribute is created: in the constructor,
+`setAttribute()`, array access and `create_attribute({...})`. A name that is empty
+or contains ASCII whitespace, a control character (NUL included) or any of `"` `'`
+`<` `>` `/` `=` throws an `\InvalidArgumentException`. Without the check, a name
+such as `x onmouseover` would render as two attributes.
+
+Names for Alpine, Vue and Angular stay valid: `@click`, `:class`,
+`x-on:click.prevent`, `[hidden]`, `(click)`, `*ngIf`, `#ref`. Drupal does not check
+names, so this is a deliberate difference. Values are escaped as in Drupal.
+
 ### Autoescape
 
 With Twig autoescape on (for example `'autoescape' => 'html'`), register the safe
@@ -110,9 +123,9 @@ $twig->addExtension(new \Parisek\Twig\AttributeExtension());
 \Parisek\Twig\AttributeExtension::registerSafeClass($twig);
 ```
 
-The call is safe to repeat. Call it before anything is rendered. It tells the Twig escaper that objects implementing
-the package's `MarkupInterface` are HTML. Strings, other `Stringable` values and
-arrays stay escaped.
+The call is safe to repeat. Call it before anything is rendered. It tells the Twig
+escaper that objects implementing the package's `MarkupInterface` are HTML.
+Strings, other `Stringable` values and arrays stay escaped.
 
 Timber 2 turns autoescape off by default. A Timber theme, including one that uses
 `parisek/timber-kit`, needs nothing.
@@ -130,11 +143,6 @@ What to know:
   fails closed: the output is over-escaped, never raw.
 - A class that implements `MarkupInterface` is declared trusted HTML. Twig prints
   its whole `__toString()` output raw.
-- Attribute names are checked. A name that is empty or contains ASCII whitespace,
-  a control character (NUL included) or any of `"` `'` `<` `>` `/` `=` throws an
-  `\InvalidArgumentException`. Names such as `@click`, `:class`, `x-on:click.prevent`,
-  `[hidden]`, `(click)`, `*ngIf` and `#ref` stay valid. Drupal does not check names;
-  this is a deliberate difference.
 - Custom `AttributeValueBase` subclasses are trusted developer input, as in Drupal.
   A value subclass that returns markup injects markup. Attribute values from the
   built-in classes are escaped.
@@ -155,10 +163,19 @@ composer cs        # code style check
 
 The vendored Drupal port comes from Drupal 11.x core at
 `git.drupalcode.org/project/drupal/-/tree/11.x/core/lib/Drupal/Core/Template`.
+
+A weekly workflow (`upstream-watch`) compares the vendored classes with upstream and
+opens an issue when they differ or when a security advisory (`SA-CORE`) commit
+appears. Run the same check by hand:
+
+```bash
+php scripts/check-upstream.php
+```
+
 When upstream changes, copy the relevant files into `.upstream/` (a gitignored
 scratch directory) and port them again. [AGENTS.md](AGENTS.md) describes the
-refresh steps and the inline shims that let the package drop `drupal/core-render`
-and `drupal/core-utility`.
+refresh steps, the inline shims that let the package drop `drupal/core-render`
+and `drupal/core-utility`, and the deliberate differences from Drupal.
 
 ## Use cases
 
