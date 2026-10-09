@@ -468,4 +468,98 @@ final class UpstreamCheckTest extends TestCase
             proc_close($process);
         }
     }
+
+    public function testMarkReviewedRefusesWithAPendingSecurityCommit(): void
+    {
+        $dir = $this->commits([$this->commit('c', 'SA-CORE-2099-003 Fix'), $this->commit('b'), $this->commit('a')]);
+        $file = $this->reviewed(str_repeat('a', 40));
+        $before = (string) file_get_contents($file);
+
+        [$code, , $err] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=Test Person'], true);
+
+        self::assertSame(1, $code);
+        self::assertStringContainsString('SA-CORE', $err);
+        self::assertSame($before, (string) file_get_contents($file), 'The file must stay unchanged.');
+    }
+
+    public function testMarkReviewedAcceptsAnAcknowledgedSecurityCommit(): void
+    {
+        $dir = $this->commits([$this->commit('c', 'SA-CORE-2099-003 Fix'), $this->commit('b'), $this->commit('a')]);
+        $file = $this->reviewed(str_repeat('a', 40));
+
+        [$code, $out] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=Test Person', '--ack=' . str_repeat('c', 12)], true);
+
+        self::assertSame(0, $code, $out);
+        $data = json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+        self::assertSame(str_repeat('c', 40), $data['commit']);
+        self::assertSame([str_repeat('c', 40)], $data['acknowledged']);
+        self::assertSame('Test Person', $data['reviewed_by']);
+    }
+
+    public function testMarkReviewedRefusesAWrongOrShortAck(): void
+    {
+        $dir = $this->commits([$this->commit('c', 'SA-CORE-2099-003 Fix'), $this->commit('a')]);
+        $file = $this->reviewed(str_repeat('a', 40));
+        $before = (string) file_get_contents($file);
+
+        [$code] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T', '--ack=' . str_repeat('b', 12)], true);
+        self::assertSame(1, $code);
+
+        [$code] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T', '--ack=ccc'], true);
+        self::assertSame(2, $code, 'A short prefix is an error.');
+        self::assertSame($before, (string) file_get_contents($file));
+    }
+
+    public function testMarkReviewedRefusesALostBoundaryUnlessReset(): void
+    {
+        $dir = $this->commits([$this->commit('f')]);
+        $file = $this->reviewed(str_repeat('a', 40));
+        $before = (string) file_get_contents($file);
+
+        [$code, , $err] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T'], true);
+        self::assertSame(1, $code);
+        self::assertStringContainsString('boundary', $err);
+        self::assertSame($before, (string) file_get_contents($file));
+
+        [$code, $out, $err] = $this->check(['--commits=' . $dir, '--reviewed=' . $file, '--mark-reviewed=T', '--reset-boundary'], true);
+        self::assertSame(0, $code, $out . $err);
+        self::assertStringContainsString('WARNING', $err);
+        $data = json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+        self::assertTrue($data['boundary_reset']);
+        self::assertSame(str_repeat('f', 40), $data['files']['Attribute']);
+    }
+
+    public function testHardTruncationClosesOpenBlocks(): void
+    {
+        $this->mutate('AttributeValueBase', '$this->value = $value;', '$this->value = $value . \'' . str_repeat('A', 80000) . '\';');
+
+        [$code, $out] = $this->check();
+
+        self::assertSame(1, $code);
+        self::assertLessThanOrEqual(60000, strlen($out));
+        self::assertSame(1, preg_match('//u', $out));
+        self::assertStringContainsString('Report truncated', $out);
+        self::assertSame(substr_count($out, '<details>'), substr_count($out, '</details>'));
+        self::assertSame(0, preg_match_all('/^```/m', $out) % 2, 'Every code fence must be closed.');
+    }
+
+    public function testAllowIsLimitedToLoopback(): void
+    {
+        foreach (['https://evil.example/', 'http://evil.example/', 'http://127.0.0.1.evil.example:80/', 'file:///etc/'] as $prefix) {
+            [$code, , $err] = $this->check(['--allow=' . $prefix]);
+
+            self::assertSame(2, $code, $prefix);
+            self::assertStringContainsString('--allow', $err);
+        }
+    }
+
+    public function testTheWorkflowNeverPassesTheTestHook(): void
+    {
+        $workflow = (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/upstream-watch.yml');
+
+        self::assertStringNotContainsString('--allow', $workflow);
+        self::assertStringNotContainsString('--reset-boundary', $workflow);
+        self::assertStringContainsString('--app github-actions', $workflow);
+        self::assertStringContainsString('--arg title', $workflow);
+    }
 }

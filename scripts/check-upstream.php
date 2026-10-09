@@ -15,7 +15,9 @@ declare(strict_types=1);
  *                         `none` skips the commit check, DIR holds <Name>.json (page 1), <Name>.2.json, ... per file.
  *   --reviewed=FILE       The last-reviewed marker. Default: .upstream-reviewed of this repository.
  *   --mark-reviewed=NAME  Record the newest upstream commit per file as reviewed by NAME. Refuses while drift exists.
- *   --allow=URL_PREFIX    Replace the allowed download prefix (tests only). Default: git.drupalcode.org only.
+ *   --ack=ID[,ID...]      With --mark-reviewed: SA-CORE commit ids (12+ hex characters) that you reviewed.
+ *   --reset-boundary      With --mark-reviewed: accept a lost review boundary. Prints a warning, records it.
+ *   --allow=URL_PREFIX    Test hook. Replaces the allowed download prefix. Only http://127.0.0.1:PORT/ or http://localhost:PORT/.
  *
  * Exit codes: 0 no functional drift, 1 drift or a new SA-CORE commit, 2 download or parse error.
  * The Markdown report goes to stdout. Errors go to stderr.
@@ -91,15 +93,24 @@ final class UpstreamCheck
             'commits' => 'api',
             'reviewed' => $root . '/.upstream-reviewed',
             'mark-reviewed' => null,
+            'ack' => null,
+            'reset-boundary' => null,
             'allow' => null,
         ];
         foreach (array_slice($argv, 1) as $argument) {
-            if (!preg_match('/^--([a-z-]+)=(.*)$/s', $argument, $m) || !array_key_exists($m[1], $options)) {
+            if ($argument === '--reset-boundary') {
+                $m = [$argument, 'reset-boundary', '1'];
+            } elseif (preg_match('/^--([a-z-]+)=(.*)$/s', $argument, $m) !== 1 || !array_key_exists($m[1], $options) || $m[1] === 'reset-boundary') {
                 fwrite(STDERR, "Unknown argument: {$argument}\n");
 
                 return 2;
             }
             $options[$m[1]] = $m[2];
+        }
+        if ($options['allow'] !== null && preg_match('#^http://(127\.0\.0\.1|localhost):\d+/#', $options['allow']) !== 1) {
+            fwrite(STDERR, "check-upstream: --allow is a test hook. It accepts only http://127.0.0.1:PORT/ or http://localhost:PORT/ prefixes.\n");
+
+            return 2;
         }
 
         self::$allowOverride = $options['allow'];
@@ -123,29 +134,23 @@ final class UpstreamCheck
         $reviewedFile = (string) $options['reviewed'];
 
         if ($options['mark-reviewed'] !== null) {
-            return self::markReviewed($diffs, $commitsMode, $reviewedFile, (string) $options['mark-reviewed']);
+            return self::markReviewed(
+                $diffs,
+                $commitsMode,
+                $reviewedFile,
+                (string) $options['mark-reviewed'],
+                $options['ack'] === null ? [] : array_values(array_filter(array_map('trim', explode(',', $options['ack'])), static fn(string $a): bool => $a !== '')),
+                $options['reset-boundary'] !== null,
+            );
         }
 
         $reviewed = null;
-        $merged = [];
+        $commits = [];
         $lost = [];
         if ($commitsMode !== 'none') {
             $reviewed = self::readReviewed($reviewedFile);
-            foreach (array_keys(self::FILES) as $name) {
-                $history = self::readHistory($commitsMode, $name, $reviewed['files'][$name]);
-                if (!$history['found']) {
-                    $lost[$name] = $history['listed'];
-                }
-                // Merge by commit id: a commit that touches several files appears once.
-                foreach ($history['new'] as $commit) {
-                    $merged[$commit['id']] ??= $commit + ['files' => []];
-                    $merged[$commit['id']]['files'][] = "{$name}.php";
-                }
-            }
+            [$commits, $lost] = self::scan($commitsMode, $reviewed);
         }
-        $commits = array_values($merged);
-        // Display order only. The boundary above never uses dates.
-        usort($commits, static fn(array $x, array $y): int => strtotime($y['committed_date']) <=> strtotime($x['committed_date']));
         fwrite(STDOUT, self::report($diffs, $commits, $lost, $reviewed));
 
         $security = array_filter($commits, static fn(array $c): bool => $c['security']);
@@ -154,12 +159,50 @@ final class UpstreamCheck
     }
 
     /**
-     * @param array<string, string> $diffs
+     * The commit scan that a normal check and --mark-reviewed share.
+     *
+     * @param array{commit: string, date: string, reviewed_by: string, files: array<string, string>} $reviewed
+     *
+     * @return array{list<CommitWithFiles>, array<string, int>} New commits (newest first) and the files with a lost boundary.
      */
-    private static function markReviewed(array $diffs, string $commitsMode, string $reviewedFile, string $who): int
+    private static function scan(string $commitsMode, array $reviewed): array
+    {
+        $merged = [];
+        $lost = [];
+        foreach (array_keys(self::FILES) as $name) {
+            $history = self::readHistory($commitsMode, $name, $reviewed['files'][$name]);
+            if (!$history['found']) {
+                $lost[$name] = $history['listed'];
+            }
+            // Merge by commit id: a commit that touches several files appears once.
+            foreach ($history['new'] as $commit) {
+                $merged[$commit['id']] ??= $commit + ['files' => []];
+                $merged[$commit['id']]['files'][] = "{$name}.php";
+            }
+        }
+        $commits = array_values($merged);
+        // Display order only. The boundary never uses dates.
+        usort($commits, static fn(array $x, array $y): int => strtotime($y['committed_date']) <=> strtotime($x['committed_date']));
+
+        return [$commits, $lost];
+    }
+
+    /**
+     * Moves the review boundary. It runs the same scan as a check and refuses to skip anything:
+     * drift, a lost boundary and unacknowledged SA-CORE commits all stop it without a write.
+     *
+     * @param array<string, string> $diffs
+     * @param list<string> $ack SA-CORE commit ids (or prefixes of 12+ characters) that the maintainer reviewed.
+     */
+    private static function markReviewed(array $diffs, string $commitsMode, string $reviewedFile, string $who, array $ack, bool $reset): int
     {
         if ($commitsMode === 'none') {
             throw new UpstreamCheckError('--mark-reviewed needs the commit lists. Do not use --commits=none.');
+        }
+        foreach ($ack as $prefix) {
+            if (preg_match('/^[0-9a-f]{12,40}$/', $prefix) !== 1) {
+                throw new UpstreamCheckError("--ack needs commit ids of 12 to 40 hex characters. Got: {$prefix}");
+            }
         }
         if ($diffs !== []) {
             fwrite(STDOUT, self::report($diffs, [], [], null));
@@ -167,6 +210,54 @@ final class UpstreamCheck
 
             return 1;
         }
+
+        $acknowledged = [];
+        $previous = null;
+        if (is_file($reviewedFile)) {
+            try {
+                $previous = self::readReviewed($reviewedFile);
+            } catch (UpstreamCheckError $e) {
+                if (!$reset) {
+                    throw $e;
+                }
+            }
+        }
+        if ($previous !== null) {
+            [$commits, $lost] = self::scan($commitsMode, $previous);
+            if ($lost !== [] && !$reset) {
+                fwrite(STDOUT, self::report([], $commits, $lost, $previous));
+                fwrite(STDERR, 'check-upstream: the review boundary is lost for ' . implode(', ', array_keys($lost)) . ". Read the recent upstream history by hand, then run again with --reset-boundary.\n");
+
+                return 1;
+            }
+            $pending = [];
+            foreach ($commits as $commit) {
+                if (!$commit['security']) {
+                    continue;
+                }
+                $matched = false;
+                foreach ($ack as $prefix) {
+                    $matched = $matched || str_starts_with($commit['id'], $prefix);
+                }
+                if ($matched) {
+                    $acknowledged[] = $commit['id'];
+                } else {
+                    $pending[] = $commit;
+                }
+            }
+            if ($pending !== []) {
+                foreach ($pending as $commit) {
+                    fwrite(STDERR, "check-upstream: SA-CORE commit {$commit['id']} is not acknowledged: " . self::clean($commit['title']) . "\n");
+                }
+                fwrite(STDERR, "check-upstream: review each SA-CORE commit, then pass its id with --ack=ID[,ID...].\n");
+
+                return 1;
+            }
+        }
+        if ($reset) {
+            fwrite(STDERR, "WARNING: --reset-boundary skips the commits between the old boundary and now. The file records this.\n");
+        }
+
         $files = [];
         $newest = null;
         foreach (array_keys(self::FILES) as $name) {
@@ -186,6 +277,12 @@ final class UpstreamCheck
             'title' => $newest['title'],
             'files' => $files,
         ];
+        if ($acknowledged !== []) {
+            $payload['acknowledged'] = $acknowledged;
+        }
+        if ($reset) {
+            $payload['boundary_reset'] = true;
+        }
         $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if ($json === false || file_put_contents($reviewedFile, $json . "\n") === false) {
             throw new UpstreamCheckError("Cannot write {$reviewedFile}.");
@@ -741,13 +838,43 @@ final class UpstreamCheck
             }
         }
 
-        $notice = "\n\n> **Report truncated.** Run `php scripts/check-upstream.php` to see all of it.\n";
-        $cut = substr($report, 0, self::MAX_REPORT_BYTES - strlen($notice));
-        while ($cut !== '' && preg_match('//u', $cut) !== 1) {
-            $cut = substr($cut, 0, -1);
-        }
+        return self::truncate($report);
+    }
 
-        return $cut . $notice;
+    /**
+     * Cuts at a line boundary, closes any open code fence and <details>, and adds a visible notice.
+     */
+    private static function truncate(string $report): string
+    {
+        $notice = "\n> **Report truncated.** Run `php scripts/check-upstream.php` to see all of it.\n";
+        $budget = self::MAX_REPORT_BYTES - strlen($notice) - 40;
+        $kept = [];
+        $size = 0;
+        $fence = null;
+        $details = 0;
+        foreach (explode("\n", $report) as $line) {
+            if ($size + strlen($line) + 1 > $budget) {
+                break;
+            }
+            $size += strlen($line) + 1;
+            $kept[] = $line;
+            if ($fence === null && preg_match('/^(`{3,})/', $line, $m) === 1) {
+                $fence = $m[1];
+            } elseif ($fence !== null && preg_match('/^(`{3,})\s*$/', $line, $m) === 1 && strlen($m[1]) >= strlen($fence)) {
+                $fence = null;
+            } elseif ($fence === null && $line === '<details>') {
+                $details++;
+            } elseif ($fence === null && $line === '</details>') {
+                $details--;
+            }
+        }
+        $out = implode("\n", $kept) . "\n";
+        if ($fence !== null) {
+            $out .= $fence . "\n";
+        }
+        $out .= str_repeat("</details>\n", max(0, $details));
+
+        return $out . $notice;
     }
 
     /** Neutral text for the report: no control characters, a length limit, valid UTF-8, HTML-escaped inside <code>. */
