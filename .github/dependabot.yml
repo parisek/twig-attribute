@@ -1,23 +1,56 @@
+# Dependabot: one summary pull request per ecosystem, once a month.
+# The same settings run in every parisek/* package (issue in each repository).
+# - monthly: fewer, larger updates cost less review than weekly single ones;
+# - minor and patch in one group, majors in another. A major never rides with
+#   the safe updates; review it alone and split it if it breaks;
+# - cooldown: a release must be 7 days old (majors 30) before Dependabot
+#   offers it. A compromised release is usually pulled within days.
+#
+# Security updates are not limited by the schedule or the cooldown. They need
+# "Dependabot security updates" on in the repository settings; the `*-security`
+# groups bundle them per ecosystem.
+#
+# Auto-merge: .github/workflows/dependabot-merge.yml squash-merges a pull
+# request when every update is minor or patch, it touches only dev
+# dependencies or action pins, and every check is green. Everything else
+# waits for the owner's review; green CI is not enough there.
 version: 2
 updates:
   - package-ecosystem: composer
     directory: /
     versioning-strategy: widen
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/Prague
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    open-pull-requests-limit: 3
+    assignees: [parisek]
     commit-message:
-      prefix: chore(deps)
+      prefix: "chore(deps)"
     groups:
+      composer-security:
+        applies-to: security-updates
+        patterns: ["*"]
       composer-minor-patch:
         update-types: [minor, patch]
+      composer-major:
+        update-types: [major]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+      time: "06:00"
+      timezone: Europe/Prague
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    assignees: [parisek]
     commit-message:
-      prefix: chore(deps)
+      prefix: "chore(deps)"
     groups:
-      github-actions-minor-patch:
-        update-types: [minor, patch]
+      github-actions:
+        patterns: ["*"]

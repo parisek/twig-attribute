@@ -1,0 +1,57 @@
+name: Dependabot merge
+
+# Squash-merges a Dependabot pull request that cannot reach the users of the
+# package once its checks are green: every update minor or patch, and only dev
+# dependencies (require-dev, devDependencies) or action pins. The rules are in
+# .github/scripts/dependabot-merge.sh; everything else waits for the owner.
+#
+# workflow_run and schedule take this file and the script from main, so the
+# pull request never supplies the code that holds the write token. The daily
+# run picks up a pull request whose last check finished after the workflows
+# below (CodeQL, for example).
+on:
+  workflow_run:
+    workflows: [Tests, Dependency Review]
+    types: [completed]
+  schedule:
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  dependabot-merge:
+    if: >-
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.conclusion == 'success'
+        && github.event.workflow_run.event == 'pull_request'
+        && startsWith(github.event.workflow_run.head_branch, 'dependabot/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: dependabot-merge-${{ github.event.workflow_run.head_branch || 'sweep' }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+      checks: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Merge what cannot reach the users of the package
+        env:
+          # The default token may not merge a change of a workflow file; the owner's token may.
+          GH_TOKEN: ${{ secrets.DEPENDABOT_MERGE_TOKEN || secrets.GITHUB_TOKEN }}
+          MERGE_TOKEN_SET: ${{ secrets.DEPENDABOT_MERGE_TOKEN != '' && '1' || '' }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REQUIRED_WORKFLOWS: 'Tests,Dependency Review'
+        run: |
+          if [ -n "$HEAD_BRANCH" ]; then
+            .github/scripts/dependabot-merge.sh "$HEAD_BRANCH" "$HEAD_SHA"
+          else
+            .github/scripts/dependabot-merge.sh
+          fi
